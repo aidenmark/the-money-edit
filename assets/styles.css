@@ -83,8 +83,7 @@
 
   /* Rhythm */
   --measure: 34rem;     /* comfortable reading width for prose */
-  --frame: 58rem;       /* outer page width, sized to hold the measure plus the rail */
-  --rail: 19rem;        /* width of the figures column on a wide screen */
+  --frame: 46rem;       /* outer page width, sized so the stack reads as cards rather than as a page */
   --gutter: clamp(1.25rem, 0.6rem + 3vw, 3.5rem);
 
   --radius: 14px;
@@ -363,117 +362,250 @@ code {
 .masthead-nav a[aria-current='page'] { color: var(--accent); }
 
 
-/* 7. Entry card ============================================================
-   A three part grid: a full width head, a prose column, and a figures rail.
+/* 7. The entry as a stack of cards ==========================================
+   The entry is not a page of prose, it is a small stack of objects. Each one
+   is a raised surface with an edge and a shadow, sitting on the background
+   rather than printed onto it. That distinction is the whole design. A
+   document is read, an object is picked up, and this arrives at the opening
+   bell wanting to be glanced at first and read second.
 
-   Below 64rem it is a single column in document order, which is why the rail
-   is written before the prose in the markup. Figures belong under the lede on
-   a phone, not at the bottom of the page. Above 64rem, explicit placement
-   moves the rail into the second column and the reading order is still right.
+   Depth is built from three layers every time: a soft gradient for the face,
+   a one pixel inset highlight along the top edge to catch the light, and a
+   wide low shadow underneath to lift it off the page.
    ========================================================================== */
 
-.card {
-  padding-top: clamp(2.5rem, 1rem + 6vw, 5.5rem);
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  column-gap: 3.5rem;
-}
-
-.card-head { margin-bottom: clamp(2rem, 1rem + 2.5vw, 3.25rem); }
-
-@media (min-width: 64rem) {
-  .card { grid-template-columns: minmax(0, 1fr) var(--rail); }
-
-  .card-head { grid-column: 1 / -1; grid-row: 1; }
-  .card-main { grid-column: 1; grid-row: 2; }
-
-  .card-rail {
-    grid-column: 2;
-    grid-row: 2;
-    /* Without this the grid item stretches to the full row height and sticky
-       has no slack to move within, so the rail would never actually stick. */
-    align-self: start;
-    position: sticky;
-    top: 2.5rem;
-  }
-
-  /* The rail is narrow, so the tiles stack instead of sitting side by side. */
-  .card-rail .figures-grid { grid-template-columns: 1fr; }
-
-  /* With no figures there is no second column to balance, so the prose
-     takes the full width rather than leaving a gap where the rail would be. */
-  .card--no-rail { grid-template-columns: minmax(0, 1fr); }
-  .card--no-rail .card-main { grid-column: 1 / -1; }
-}
-
-/* The rail carries its own bottom spacing only when it is stacked, because in
-   the two column layout the grid gap already handles it. */
-.card-rail { margin-bottom: 3.25rem; }
-@media (min-width: 64rem) {
-  .card-rail { margin-bottom: 0; }
-}
-
-.card-date {
-  font-family: var(--font-mono);
-  font-size: var(--size-micro);
-  letter-spacing: 0.24em;
-  text-transform: uppercase;
-  color: var(--accent);
-  margin-bottom: 1.4rem;
+.entry {
   display: flex;
-  align-items: center;
-  gap: 0.9rem;
+  flex-direction: column;
+  gap: 1.15rem;
+  padding-top: clamp(1.25rem, 0.6rem + 2.5vw, 2.75rem);
 }
-/* The hairline trailing off the date is what makes the block read as a
-   readout rather than as a byline. */
-.card-date::after {
+
+.widget {
+  position: relative;
+  overflow: hidden;
+  padding: clamp(1.25rem, 0.85rem + 1.5vw, 1.9rem);
+  border: 1px solid rgba(255, 255, 255, 0.085);
+  border-radius: 20px;
+  background:
+    linear-gradient(168deg,
+      rgba(255, 255, 255, 0.055),
+      rgba(255, 255, 255, 0.017) 44%,
+      rgba(255, 255, 255, 0.006));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    0 20px 44px -28px rgba(0, 0, 0, 0.95);
+  transition: transform 0.45s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.45s ease;
+}
+
+/* A card should respond to being pointed at. It is a small thing but it is
+   most of what separates an object from a panel. */
+.widget:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 28px 56px -28px rgba(0, 0, 0, 1);
+}
+
+
+/* 7a. Opening bell ---------------------------------------------------------
+   The loudest card, and the reason to open this at 9:30. It carries the
+   accent, a live pulse, and the only genuinely large numerals on the page.
+   -------------------------------------------------------------------------- */
+
+.widget--bell {
+  border-color: color-mix(in oklab, var(--accent) 30%, transparent);
+  background:
+    linear-gradient(165deg,
+      color-mix(in oklab, var(--accent) 13%, transparent),
+      rgba(255, 255, 255, 0.02) 52%,
+      rgba(255, 255, 255, 0.005));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 26px 64px -30px color-mix(in oklab, var(--accent) 45%, transparent),
+    0 20px 44px -30px rgba(0, 0, 0, 0.9);
+}
+
+/* A slow highlight travelling across the face, so the card reads as lit
+   rather than printed. Skewed so it crosses on a diagonal. */
+.widget--bell::after {
   content: '';
-  flex: 1;
-  height: 1px;
-  background: linear-gradient(90deg, var(--accent-soft), transparent);
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 45%;
+  height: 100%;
+  pointer-events: none;
+  transform: skewX(-18deg);
+  background: linear-gradient(90deg,
+    transparent,
+    color-mix(in oklab, var(--accent) 9%, transparent),
+    transparent);
+  animation: sheen 7s cubic-bezier(0.4, 0, 0.3, 1) infinite;
 }
 
-.card-headline {
-  font-family: var(--font-display);
-  font-weight: 400;
-  font-size: var(--size-hero);
-  line-height: 1.03;
-  letter-spacing: -0.018em;
-  margin: 0;
-  /* Fill the measure rather than balance the lines.
-     text-wrap: balance evens the line lengths by making every line shorter
-     than the container, which is precisely what left the right side empty
-     and made the headline read as pushed to one side. Filling greedily
-     anchors the first line to the full width, which is how a headline is
-     meant to sit. pretty keeps a single trailing word off its own line. */
-  text-wrap: pretty;
+@keyframes sheen {
+  0%   { transform: translateX(-140%) skewX(-18deg); }
+  55%  { transform: translateX(360%) skewX(-18deg); }
+  100% { transform: translateX(360%) skewX(-18deg); }
 }
 
-.card-lede {
-  font-size: var(--size-lede);
-  line-height: 1.6;
-  color: var(--text-soft);
-  max-width: var(--measure);
-  margin: 0 0 3.25rem;
-}
-
-.section { margin-bottom: 2.9rem; max-width: var(--measure); }
-
-.section-label {
+.bell-strip {
   display: flex;
   align-items: center;
-  gap: 0.85rem;
+  gap: 0.7rem;
+  margin-bottom: 1.35rem;
   font-family: var(--font-mono);
   font-size: var(--size-micro);
   font-weight: 500;
   letter-spacing: 0.22em;
   text-transform: uppercase;
+  color: var(--accent);
+}
+
+.bell-strip time {
+  margin-left: auto;
   color: var(--text-mute);
-  margin: 0 0 1rem;
+  letter-spacing: 0.16em;
+}
+
+/* The pulse. This is the one element that says the information is fresh. */
+.bell-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: pulse 2.6s ease-out infinite;
+}
+
+@keyframes pulse {
+  0%   { box-shadow: 0 0 0 0 color-mix(in oklab, var(--accent) 65%, transparent); }
+  70%  { box-shadow: 0 0 0 10px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+/* The tape. Up to three headline numbers, sized to be read across a room.
+   Separate tiles with their own edges rather than a divided grid, so an odd
+   count never leaves an empty cell behind. */
+.tape {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
+  gap: 0.65rem;
+}
+
+.tape-tile {
+  padding: 0.85rem 0.95rem 0.9rem;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 13px;
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.tape-label {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: var(--size-micro);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-mute);
+  margin-bottom: 0.55rem;
+  /* Index names vary in length. One line keeps every tile the same height. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tape-value {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: clamp(1.45rem, 1.1rem + 1.3vw, 2rem);
+  font-weight: 500;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+.tape-change {
+  display: block;
+  margin-top: 0.4rem;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--text-mute);
+}
+
+.tape-tile[data-direction='up'] .tape-change { color: var(--up); }
+.tape-tile[data-direction='down'] .tape-change { color: var(--down); }
+.tape-tile[data-direction='up'] .tape-change::before { content: '\2191\00a0'; }
+.tape-tile[data-direction='down'] .tape-change::before { content: '\2193\00a0'; }
+
+/* Everything past the first three, as a quiet list under the tape. */
+.bell-rest {
+  margin-top: 1.15rem;
+  padding-top: 0.95rem;
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 0.6rem;
+}
+
+.bell-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.bell-row-label {
+  font-family: var(--font-mono);
+  font-size: var(--size-micro);
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--text-mute);
+}
+
+.bell-row-value {
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--text);
+  text-align: right;
+}
+
+.bell-row[data-direction='up'] .bell-row-value { color: var(--up); }
+.bell-row[data-direction='down'] .bell-row-value { color: var(--down); }
+.bell-row[data-direction='up'] .bell-row-value::before { content: '\2191\00a0'; }
+.bell-row[data-direction='down'] .bell-row-value::before { content: '\2193\00a0'; }
+
+
+/* 7b. The story ------------------------------------------------------------ */
+
+.entry-headline {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: var(--size-hero);
+  line-height: 1.04;
+  letter-spacing: -0.018em;
+  margin: 0 0 1.6rem;
+  text-wrap: pretty;
+}
+
+.section { margin-bottom: 1.9rem; }
+.section:last-child { margin-bottom: 0; }
+
+.section-label {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  font-family: var(--font-mono);
+  font-size: var(--size-micro);
+  font-weight: 500;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--text-mute);
+  margin: 0 0 0.85rem;
 }
 .section-label::before {
   content: '';
-  width: 16px;
+  width: 14px;
   height: 1px;
   background: var(--accent);
 }
@@ -486,108 +618,29 @@ code {
   text-underline-offset: 3px;
 }
 
+/* "What it means for you" is the reason this project exists, so it is lifted
+   out of the run of prose rather than being the third heading of three. */
+.section--payoff {
+  padding: 1.2rem 1.35rem;
+  border-left: 2px solid var(--accent);
+  border-radius: 0 13px 13px 0;
+  background: var(--accent-soft);
+}
+.section--payoff .section-label { color: var(--accent); }
+.section--payoff .section-body { color: var(--text); }
 
-/* 8. Figure panel ==========================================================
-   The numbers are the reason someone opens this at 9:30am, so they get the
-   most visual weight after the headline. Corner brackets rather than a full
-   border keep it from reading as a table.
+
+/* 8. Term of the day =======================================================
+   A flashcard. Building vocabulary is the point of reading this daily, so
+   the term gets a card of its own rather than a footnote.
    ========================================================================== */
 
-.figures {
-  position: relative;
-  margin: 0;
-  padding: 1.75rem;
-  background: linear-gradient(160deg, var(--surface-glass), transparent 60%);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-}
-
-/* Two L shaped brackets, one at each opposing corner, drawn in the accent. */
-.figures::before,
-.figures::after {
-  content: '';
-  position: absolute;
-  width: 15px;
-  height: 15px;
-  border-color: var(--accent);
-  opacity: 0.75;
-}
-.figures::before {
-  top: -1px; left: -1px;
-  border-top: 1.5px solid;
-  border-left: 1.5px solid;
-  border-radius: var(--radius) 0 0 0;
-}
-.figures::after {
-  bottom: -1px; right: -1px;
-  border-bottom: 1.5px solid;
-  border-right: 1.5px solid;
-  border-radius: 0 0 var(--radius) 0;
-}
-
-.figures-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(13.5rem, 1fr));
-  gap: 1px;
-  border-radius: var(--radius-sm);
-  /* Clips the outermost tile rings so they do not double up against the
-     panel border. */
-  overflow: hidden;
-}
-
-/* Each tile paints its own background so the 1px grid gap above shows
-   through as the divider. One rule instead of managing border sides. */
-.figure {
-  background: var(--surface);
-  /* Each tile draws its own hairline rather than the grid painting a
-     background that shows through the gaps. The background trick is neater
-     until an odd number of figures leaves a cell empty, at which point the
-     gap colour fills it and it reads as a broken tile. A ring per tile has
-     no such phantom, and adjacent rings share the one pixel gap so the
-     dividers still look like single hairlines. */
-  box-shadow: 0 0 0 1px var(--line);
-  padding: 1rem 1.15rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-  transition: background 0.3s ease;
-}
-.figure:hover { background: var(--surface-raised); }
-
-.figure-label {
-  font-size: var(--size-micro);
-  letter-spacing: 0.13em;
-  text-transform: uppercase;
-  color: var(--text-mute);
-  font-weight: 500;
-}
-
-.figure-value {
-  font-family: var(--font-mono);
-  font-size: 0.95rem;
-  font-weight: 500;
-  line-height: 1.35;
-  color: var(--text);
-}
-
-/* Direction is carried by a leading arrow as well as by color, so the
-   information does not depend on color vision alone. */
-.figure[data-direction='up'] .figure-value { color: var(--up); }
-.figure[data-direction='down'] .figure-value { color: var(--down); }
-.figure[data-direction='up'] .figure-value::before { content: '\2191\00a0'; }
-.figure[data-direction='down'] .figure-value::before { content: '\2193\00a0'; }
-
-
-/* 9. Term of the day ======================================================= */
-
-.term {
-  position: relative;
-  margin: 0 0 3.25rem;
-  padding: 1.6rem 1.75rem;
-  max-width: var(--measure);
-  background: var(--accent-soft);
-  border-left: 2px solid var(--accent);
-  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+.widget--term {
+  border-color: color-mix(in oklab, var(--accent) 24%, transparent);
+  background:
+    linear-gradient(150deg,
+      color-mix(in oklab, var(--accent) 11%, transparent),
+      rgba(255, 255, 255, 0.012) 60%);
 }
 
 .term-label {
@@ -596,23 +649,37 @@ code {
   letter-spacing: 0.22em;
   text-transform: uppercase;
   color: var(--accent);
-  margin: 0 0 0.7rem;
+  margin: 0 0 0.75rem;
 }
 
 .term-name {
   font-family: var(--font-display);
-  font-size: 1.5rem;
+  font-size: clamp(1.6rem, 1.3rem + 1.1vw, 2.15rem);
   font-weight: 400;
-  line-height: 1.2;
-  margin: 0 0 0.55rem;
+  line-height: 1.15;
+  margin: 0 0 0.6rem;
   color: var(--text);
 }
 
 .term-definition {
   color: var(--text-soft);
-  font-size: 0.96rem;
   margin: 0;
 }
+
+
+/* 9. Source ================================================================ */
+
+.entry-source {
+  margin: 0;
+  font-size: var(--size-small);
+  color: var(--text-mute);
+}
+.entry-source a {
+  color: var(--text-soft);
+  text-underline-offset: 3px;
+  text-decoration-color: var(--line-strong);
+}
+.entry-source a:hover { color: var(--accent); }
 
 
 /* 10. Archive index ======================================================== */

@@ -156,59 +156,52 @@ export function entryPath(entry) {
 export function renderCard(entry, { previous = null, next = null } = {}) {
   const accent = accentFor(entry.date);
   let step = 0;
+  const rise = () => `class="widget rise" style="--step:${step++}"`;
 
-  const hasRail = entry.figures.length > 0;
-  const parts = [];
+  // The first three figures are the headline numbers and get the large tiles.
+  // Anything past that is still shown, as a quieter list underneath, so no
+  // reported figure is ever dropped just because it did not fit the design.
+  const headline = entry.figures.slice(0, 3);
+  const rest = entry.figures.slice(3);
 
-  /* The card is a three part grid.
-   *
-   *   head   Date and headline. Spans the full width, so the entry opens the
-   *          way a page opens rather than as a column.
-   *   rail   Key figures. Second column on a wide screen, where it stays in
-   *          view while the prose scrolls past it.
-   *   main   The writing, the term, and the source. First column.
-   *
-   * The rail is emitted before main in the source rather than after. On a
-   * phone the grid collapses to one column in document order, and figures
-   * belong directly under the lede there, not stranded at the bottom of the
-   * page. Grid placement puts it back on the right at desktop width, so the
-   * reading order is correct at both sizes without duplicating any markup.
-   *
-   * The Content summary is deliberately not shown on the card. It is a
-   * condensation of the same writeup the page body already contains, so
-   * rendering both printed the opening paragraph twice on every structured
-   * entry. The summary still does real work elsewhere, as the meta and
-   * OpenGraph description, the archive listing, and the RSS item, which is
-   * why it is fetched rather than dropped.
-   */
-  parts.push(`<article class="card${hasRail ? '' : ' card--no-rail'}">
-<header class="card-head">
-<p class="card-date rise" style="--step:${step++}">${escapeHtml(formatLongDate(entry.date))}</p>
-<h1 class="card-headline rise" style="--step:${step++}">${escapeHtml(entry.headline)}</h1>
-</header>`);
+  const parts = ['<article class="entry">'];
 
-  if (hasRail) {
-    parts.push(`<aside class="card-rail rise" style="--step:${step++}" aria-labelledby="figures-heading">
-<section class="figures">
-<h2 class="sr-only" id="figures-heading">Key figures</h2>
-<div class="figures-grid">
-${entry.figures.map(figureTile).join('\n')}
-</div>
-</section>
-</aside>`);
+  if (entry.figures.length > 0) {
+    parts.push(`<section ${rise().replace('widget', 'widget widget--bell')} aria-labelledby="bell-heading">
+<p class="bell-strip">
+<span class="bell-dot" aria-hidden="true"></span>
+<span id="bell-heading">Opening bell</span>
+<time datetime="${escapeHtml(entry.date)}">${escapeHtml(formatLongDate(entry.date))}</time>
+</p>
+<div class="tape">
+${headline.map(tapeTile).join('\n')}
+</div>${
+      rest.length
+        ? `
+<div class="bell-rest">
+${rest.map(restRow).join('\n')}
+</div>`
+        : ''
+    }
+</section>`);
   }
 
-  parts.push('<div class="card-main">');
-
+  const story = [`<h1 class="entry-headline">${escapeHtml(entry.headline)}</h1>`];
   for (const section of entry.sections) {
-    parts.push(`<section class="section rise" style="--step:${step++}">
+    // "What it means for you" is the reason this project exists, so it is
+    // lifted out of the run of prose rather than being the third of three.
+    const payoff = section.key === 'what-it-means' ? ' section--payoff' : '';
+    story.push(`<section class="section${payoff}">
 <h2 class="section-label">${escapeHtml(section.label)}</h2>
 <div class="section-body">${section.html}</div>
 </section>`);
   }
+  parts.push(`<section ${rise().replace('widget', 'widget widget--story')}>
+${story.join('\n')}
+</section>`);
 
   if (entry.term) {
-    parts.push(`<aside class="term rise" style="--step:${step++}">
+    parts.push(`<aside ${rise().replace('widget', 'widget widget--term')}>
 <p class="term-label">Term of the day</p>
 <h2 class="term-name">${escapeHtml(entry.term.term)}</h2>
 <p class="term-definition">${escapeHtml(entry.term.definition)}</p>
@@ -216,14 +209,13 @@ ${entry.figures.map(figureTile).join('\n')}
   }
 
   if (entry.source) {
-    parts.push(`<p class="card-source rise" style="--step:${step++}">Source: <a href="${escapeHtml(
-      entry.source.url
-    )}" rel="noopener noreferrer nofollow" target="_blank">${escapeHtml(
+    parts.push(`<section ${rise()}>
+<p class="entry-source">Source: <a href="${escapeHtml(entry.source.url)}" rel="noopener noreferrer nofollow" target="_blank">${escapeHtml(
       entry.source.title || entry.source.url
-    )}</a></p>`);
+    )}</a></p>
+</section>`);
   }
 
-  parts.push('</div>');
   parts.push('</article>');
 
   if (previous || next) {
@@ -238,15 +230,103 @@ ${navLink(next, 'next')}
     description: entry.summary || `${SITE_NAME} for ${formatLongDate(entry.date)}.`,
     canonicalPath: entryPath(entry),
     accent,
-    bodyClass: 'is-card',
+    bodyClass: 'is-entry',
     content: parts.join('\n'),
   });
 }
 
-function figureTile(figure) {
-  return `<div class="figure" data-direction="${escapeHtml(figure.direction)}">
-<span class="figure-label">${escapeHtml(figure.label)}</span>
-<span class="figure-value">${escapeHtml(figure.value)}</span>
+/**
+ * Split a figure value into the number to show large and the movement to show
+ * beneath it.
+ *
+ * Entries phrase figures three ways, so three shapes are handled:
+ *
+ *   "0.5% to 7,703.78"          the level is what moved to, 0.5% is the move
+ *   "5.30%, highest since 2007" the level is the number, the rest is a note
+ *   "4.72%"                     just a level
+ *
+ * This is presentation, not parsing, which is why it lives here rather than in
+ * parse.js. The stored figure keeps the full phrase the writer used.
+ */
+export function splitFigure(figure) {
+  const value = String(figure.value ?? '');
+  let level;
+  let change;
+
+  // "0.5% to 7,703.78". The number after "to" is where it landed.
+  const moved = /^(.+?)\s+to\s+(.+)$/.exec(value);
+
+  // "53,483 down 0.46%". A leading number is the level and the rest is the
+  // move. The number pattern has to swallow its own thousands separators,
+  // which is the bug this replaced: splitting on the first comma turned
+  // "53,483 down 0.46%" into a level of "53".
+  const leading =
+    /^(?:about|roughly|around|approximately|above|below|near|over|under)?\s*(\$?\d[\d.,]*%?)\s+(.+)$/i.exec(
+      value
+    );
+
+  // "5.30%, highest since 2007". The comma must be followed by a space, or a
+  // thousands separator would match here too.
+  const noted = /^([^,]+),\s+(.+)$/.exec(value);
+
+  if (moved) {
+    [, change, level] = moved;
+  } else if (leading) {
+    [, level, change] = leading;
+  } else if (noted) {
+    [, level, change] = noted;
+  } else {
+    level = value || figure.label;
+    change = '';
+  }
+
+  // The tile prefixes an arrow, so a change that also opens with the word
+  // would read "arrow down 0.46%".
+  if (figure.direction && figure.direction !== 'flat') {
+    change = change.replace(
+      /^(down|up|fell|rose|climbed|gained|slipped|dropped|declined|lower|higher|surged|jumped)\b\s*/i,
+      ''
+    );
+  }
+
+  return { level, change: change.trim() };
+}
+
+/**
+ * Shorten a label for the large tiles.
+ *
+ * The tiles are deliberately narrow, and a wrapped or truncated label undoes
+ * the point of them. Only the tile is shortened. The full name is kept as the
+ * title attribute, and the quieter list below uses the original wording, so
+ * nothing is actually lost.
+ */
+export function shortenLabel(label) {
+  const text = String(label ?? '').trim();
+
+  if (/^dow jones/i.test(text)) return 'Dow';
+  if (/^nasdaq composite$/i.test(text)) return 'Nasdaq';
+
+  // "30-year Treasury yield" reads better as "30Y Treasury" at this size.
+  const treasury = /^(\d+)[\s-]*year\s+(.+?)(\s+yield)?$/i.exec(text);
+  if (treasury) return `${treasury[1]}Y ${treasury[2]}`;
+
+  return text.replace(/\s+yield$/i, '');
+}
+
+function tapeTile(figure) {
+  const { level, change } = splitFigure(figure);
+  return `<div class="tape-tile" data-direction="${escapeHtml(figure.direction)}">
+<span class="tape-label" title="${escapeHtml(figure.label)}">${escapeHtml(shortenLabel(figure.label))}</span>
+<span class="tape-value">${escapeHtml(level)}</span>${
+    change ? `\n<span class="tape-change">${escapeHtml(change)}</span>` : ''
+  }
+</div>`;
+}
+
+function restRow(figure) {
+  return `<div class="bell-row" data-direction="${escapeHtml(figure.direction)}">
+<span class="bell-row-label">${escapeHtml(figure.label)}</span>
+<span class="bell-row-value">${escapeHtml(figure.value)}</span>
 </div>`;
 }
 

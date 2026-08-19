@@ -12,7 +12,18 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 import { parseEntry } from '../src/parse.js';
-import { renderCard, renderArchive, renderGlossary, accentFor, entryPath } from '../src/render.js';
+import {
+  renderCard,
+  renderArchive,
+  renderGlossary,
+  accentFor,
+  entryPath,
+  splitFigure,
+  shortenLabel,
+} from '../src/render.js';
+
+/** Match how the renderer escapes text, so assertions compare like with like. */
+const escapeForTest = (text) => String(text).replace(/&/g, '&amp;');
 
 const fixtures = JSON.parse(readFileSync(new URL('./fixtures/entries.json', import.meta.url)));
 const entries = fixtures.entries
@@ -21,27 +32,31 @@ const entries = fixtures.entries
 
 const withFigures = entries.find((entry) => entry.figures.length > 0);
 
-test('a card with figures renders the rail', () => {
+test('a card with figures leads with the opening bell widget', () => {
   const html = renderCard(withFigures);
 
-  assert.match(html, /class="card"/);
-  assert.match(html, /class="card-rail rise"/);
-  assert.ok(!html.includes('card--no-rail'), 'should not carry the no-rail modifier');
+  assert.match(html, /class="widget widget--bell rise"/);
+  assert.match(html, /class="bell-dot"/);
+  // The bell must come before the story, since the numbers are the reason to
+  // open this at 9:30 and the writing is what you stay for.
+  assert.ok(html.indexOf('widget--bell') < html.indexOf('widget--story'));
 });
 
-test('the rail comes before the prose in the source', () => {
-  // This is what puts key figures directly under the lede on a phone, where
-  // the grid collapses to document order. Reversing it would strand the
-  // numbers at the bottom of the page.
+test('only the first three figures get large tiles, the rest are still shown', () => {
+  // The Aug 18 entry carries six figures. Three become headline tiles and the
+  // other three drop to the quiet list. None may be dropped outright.
+  assert.equal(withFigures.figures.length, 6);
+
   const html = renderCard(withFigures);
+  assert.equal(html.match(/class="tape-tile"/g)?.length ?? 0, 3);
+  assert.equal(html.match(/class="bell-row"/g)?.length ?? 0, 3);
 
-  assert.ok(
-    html.indexOf('class="card-rail') < html.indexOf('class="card-main"'),
-    'the rail must precede card-main so the mobile reading order is correct'
-  );
+  for (const figure of withFigures.figures) {
+    assert.ok(html.includes(escapeForTest(figure.label)), `missing ${figure.label}`);
+  }
 });
 
-test('a card with no figures drops the rail and widens the prose', () => {
+test('a card with no figures omits the bell widget entirely', () => {
   const bare = parseEntry({
     id: 'x',
     headline: 'A quiet day',
@@ -54,10 +69,54 @@ test('a card with no figures drops the rail and widens the prose', () => {
 
   const html = renderCard(bare);
 
-  assert.match(html, /class="card card--no-rail"/);
-  assert.ok(!html.includes('card-rail'), 'there should be no rail element at all');
-  // The summary still has to appear, even with an empty page body.
+  assert.ok(!html.includes('widget--bell'), 'no bell widget without figures');
+  assert.match(html, /widget--story/);
   assert.match(html, /Not much moved\./);
+});
+
+test('what it means for you is promoted out of the run of prose', () => {
+  // This section is the reason the project exists, so it must not render as
+  // just the third heading of three.
+  const html = renderCard(withFigures);
+  assert.match(html, /class="section section--payoff"/);
+});
+
+test('splitFigure does not split on a thousands separator', () => {
+  // The original bug. "53,483 down 0.46%" split at the first comma and showed
+  // a Dow of 53. The level has to swallow its own separators.
+  assert.deepEqual(splitFigure({ value: '53,483 down 0.46%', direction: 'down', label: 'Dow' }), {
+    level: '53,483',
+    change: '0.46%',
+  });
+  assert.deepEqual(
+    splitFigure({ value: '7,750.48 down 0.45%', direction: 'down', label: 'S&P 500' }),
+    { level: '7,750.48', change: '0.45%' }
+  );
+});
+
+test('splitFigure separates the level from the movement', () => {
+  assert.deepEqual(splitFigure({ value: '0.5% to 7,703.78', label: 'S&P 500' }), {
+    level: '7,703.78',
+    change: '0.5%',
+  });
+  assert.deepEqual(splitFigure({ value: '5.30%, highest since 2007', label: 'x' }), {
+    level: '5.30%',
+    change: 'highest since 2007',
+  });
+  assert.deepEqual(splitFigure({ value: '4.72%', label: 'x' }), {
+    level: '4.72%',
+    change: '',
+  });
+});
+
+test('long index names are shortened for the tiles but not lost', () => {
+  assert.equal(shortenLabel('Dow Jones Industrial Average'), 'Dow');
+  assert.equal(shortenLabel('30-year Treasury yield'), '30Y Treasury');
+  assert.equal(shortenLabel('S&P 500'), 'S&P 500');
+
+  // The untruncated name still has to reach the markup, as the tooltip.
+  const html = renderCard(withFigures);
+  assert.match(html, /title="Dow Jones Industrial Average"/);
 });
 
 test('previous and next hold their grid columns when one side is missing', () => {
