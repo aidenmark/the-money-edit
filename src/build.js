@@ -17,13 +17,25 @@
  */
 
 import { mkdir, rm, writeFile, copyFile, readFile } from 'node:fs/promises';
+import { deflateSync } from 'node:zlib';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { requireNotionToken } from './config.js';
 import { fetchAllRows, fetchPageBlocks, normalizeRow } from './notion.js';
 import { parseEntry } from './parse.js';
-import { renderCard, renderArchive, renderGlossary, entryPath, url, ORIGIN, SITE_NAME, SITE_TAGLINE } from './render.js';
+import {
+  renderCard,
+  renderArchive,
+  renderGlossary,
+  renderLatestRedirect,
+  renderManifest,
+  entryPath,
+  url,
+  ORIGIN,
+  SITE_NAME,
+  SITE_TAGLINE,
+} from './render.js';
 import { todayInNewYork, daysBetween, slugify, escapeHtml } from './util.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -108,16 +120,17 @@ function selectPublishable(entries, today) {
  * happened yet but costs three lines to make impossible.
  */
 function assignSlugs(entries) {
-  const taken = new Set();
+  // How many entries already seen for a given date. The first entry of a day
+  // gets the clean /2026/08/18/ path, which is the one the morning
+  // notification can construct without knowing anything but the date. Any
+  // second entry that day is suffixed rather than colliding.
+  const perDate = new Map();
+
   for (const entry of entries) {
-    const base = slugify(entry.headline) || 'entry';
-    let slug = base;
-    let counter = 2;
-    while (taken.has(`${entry.date}-${slug}`)) {
-      slug = `${base}-${counter++}`;
-    }
-    taken.add(`${entry.date}-${slug}`);
-    entry.slug = slug;
+    const seen = perDate.get(entry.date) ?? 0;
+    entry.dateIndex = seen;
+    perDate.set(entry.date, seen + 1);
+    entry.slug = slugify(entry.headline) || 'entry';
   }
   return entries;
 }
@@ -149,6 +162,92 @@ function collectGlossary(entries) {
 /* -------------------------------------------------------------------------
    Extra files
    ------------------------------------------------------------------------- */
+
+/**
+ * A 180 by 180 home screen icon, encoded as a PNG by hand.
+ *
+ * iOS ignores SVG for apple-touch-icon, so a raster file is required, and
+ * this project has no image library and is not going to gain one for a single
+ * 180 pixel square. A PNG is a signature followed by three chunks, and the
+ * pixel data is just deflated scanlines, both of which node:zlib already
+ * provides. The whole thing is about forty lines.
+ *
+ * The mark matches the favicon and the wordmark: two offset squares.
+ */
+function touchIconPng() {
+  const size = 180;
+  const background = [0x06, 0x07, 0x0a];
+  const squares = [
+    { x: 39, y: 39, side: 46, rgb: [0xe8, 0xc8, 0x8a] }, // champagne
+    { x: 95, y: 95, side: 46, rgb: [0x8f, 0xc7, 0xe8] }, // ice
+  ];
+
+  // Raw scanlines. Each row is prefixed with a zero byte, the PNG filter type
+  // meaning "no filtering", which keeps the encoder trivial.
+  const raw = Buffer.alloc(size * (size * 3 + 1));
+  let offset = 0;
+  for (let y = 0; y < size; y += 1) {
+    raw[offset++] = 0;
+    for (let x = 0; x < size; x += 1) {
+      const hit = squares.find(
+        (s) => x >= s.x && x < s.x + s.side && y >= s.y && y < s.y + s.side
+      );
+      const [r, g, b] = hit ? hit.rgb : background;
+      raw[offset++] = r;
+      raw[offset++] = g;
+      raw[offset++] = b;
+    }
+  }
+
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(size, 0);
+  ihdr.writeUInt32BE(size, 4);
+  ihdr[8] = 8;  // bit depth
+  ihdr[9] = 2;  // colour type 2, truecolour RGB
+  // bytes 10 to 12 stay zero: deflate compression, adaptive filtering, no interlace
+
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    pngChunk('IHDR', ihdr),
+    pngChunk('IDAT', deflateSync(raw, { level: 9 })),
+    pngChunk('IEND', Buffer.alloc(0)),
+  ]);
+}
+
+/** Length, type, payload, CRC. The CRC covers the type and the payload. */
+function pngChunk(type, payload) {
+  const header = Buffer.alloc(4);
+  header.writeUInt32BE(payload.length, 0);
+  const body = Buffer.concat([Buffer.from(type, 'ascii'), payload]);
+  const crc = Buffer.alloc(4);
+  crc.writeUInt32BE(crc32(body), 0);
+  return Buffer.concat([header, body, crc]);
+}
+
+/**
+ * CRC-32 as PNG specifies it. node:zlib gained a crc32 export after Node 18,
+ * and the engines field allows Node 18, so it is implemented here rather than
+ * silently requiring a newer runtime.
+ */
+const CRC_TABLE = (() => {
+  const table = new Int32Array(256);
+  for (let n = 0; n < 256; n += 1) {
+    let c = n;
+    for (let k = 0; k < 8; k += 1) {
+      c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    }
+    table[n] = c;
+  }
+  return table;
+})();
+
+function crc32(buffer) {
+  let crc = -1;
+  for (let i = 0; i < buffer.length; i += 1) {
+    crc = CRC_TABLE[(crc ^ buffer[i]) & 0xff] ^ (crc >>> 8);
+  }
+  return (crc ^ -1) >>> 0;
+}
 
 /** A mark rather than a letterform. The square is the same one the wordmark
  *  uses, which keeps the tab consistent with the page. */
@@ -246,6 +345,13 @@ async function write(relativePath, contents) {
   await writeFile(target, contents, 'utf8');
 }
 
+/** Same as write, but for a Buffer, so no encoding is applied. */
+async function writeBinary(relativePath, buffer) {
+  const target = join(OUT, relativePath);
+  await mkdir(dirname(target), { recursive: true });
+  await writeFile(target, buffer);
+}
+
 /* -------------------------------------------------------------------------
    Main
    ------------------------------------------------------------------------- */
@@ -288,10 +394,19 @@ async function main() {
     renderGlossary(collectGlossary(published), { latestDate: published[0]?.date ?? null })
   );
 
+  // The address the morning push notification points at. Written even when
+  // nothing is published, so the link never 404s.
+  if (published.length > 0) {
+    await write('latest/index.html', renderLatestRedirect(published[0]));
+  }
+
+  await write('manifest.webmanifest', renderManifest());
   await write('404.html', render404());
   await write('feed.xml', renderFeed(published));
   await write(
     'sitemap.xml',
+    // /latest/ is deliberately excluded. It is a redirect, and indexing it
+    // would compete with the entry it points at.
     renderSitemap(['/', '/glossary/', ...published.map(entryPath)])
   );
   await write('robots.txt', `User-agent: *\nAllow: /\nSitemap: ${ORIGIN}${url('sitemap.xml')}\n`);
@@ -303,6 +418,10 @@ async function main() {
   await mkdir(join(OUT, 'assets'), { recursive: true });
   await copyFile(join(ROOT, 'assets/styles.css'), join(OUT, 'assets/styles.css'));
   await write('assets/favicon.svg', faviconSvg());
+  // iOS ignores SVG for the home screen icon, so a PNG is required. This is a
+  // tiny hand assembled file rather than a build dependency on an image
+  // library, which the project deliberately does not have.
+  await writeBinary('assets/icon.png', touchIconPng());
 
   const withFigures = published.filter((entry) => entry.figures.length > 0).length;
   const withTerms = published.filter((entry) => entry.term).length;

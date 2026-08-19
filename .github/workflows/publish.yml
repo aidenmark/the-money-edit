@@ -13,16 +13,22 @@
 name: Publish
 
 on:
-  # Twice on weekdays. The entry is filed at 9:30am Eastern, so the first run
-  # picks up anything approved that morning and the second catches an
-  # afternoon approval the same day.
+  # The entry is filed at 9:30am Eastern and, now that the task publishes
+  # directly rather than filing a draft, this build is the only thing standing
+  # between it being written and it being readable. So the first build runs at
+  # 9:45 Eastern, fifteen minutes behind the entry.
   #
-  # Cron here is always UTC and does not follow daylight saving, so 15:00 UTC
-  # lands at 11:00 Eastern in summer and 10:00 in winter. Both are after the
-  # entry is filed, which is what matters.
+  # Cron in Actions is always UTC and does not follow daylight saving, so
+  # 9:45 Eastern is two different UTC times across the year. Both are listed.
+  # In summer 13:45 UTC is the 9:45 run and 14:45 is a harmless second pass.
+  # In winter it is the other way round. Two cheap builds beats a DST bug that
+  # would surface twice a year and be maddening to diagnose.
+  #
+  # The evening run catches an entry edited later in the day.
   schedule:
-    - cron: '0 15 * * 1-5'
-    - cron: '0 21 * * 1-5'
+    - cron: '45 13 * * 1-5'
+    - cron: '45 14 * * 1-5'
+    - cron: '0 22 * * 1-5'
 
   # Republish whenever the site code itself changes.
   push:

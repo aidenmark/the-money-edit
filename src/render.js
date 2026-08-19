@@ -97,6 +97,11 @@ export function layout({
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=Inter:wght@400;500;600&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
 <link rel="stylesheet" href="${url('assets/styles.css')}">
 <link rel="icon" href="${url('assets/favicon.svg')}" type="image/svg+xml">
+<link rel="apple-touch-icon" href="${url('assets/icon.png')}">
+<link rel="manifest" href="${url('manifest.webmanifest')}">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Money Edit">
 <link rel="alternate" type="application/rss+xml" title="${escapeHtml(SITE_NAME)}" href="${url('feed.xml')}">
 </head>
 <body class="${escapeHtml(`${accent.className} ${bodyClass}`.trim())}" style="--bloom-x:${accent.bloomX};--bloom-y:${accent.bloomY}">
@@ -136,9 +141,25 @@ function footer() {
 </footer>`;
 }
 
-/** The path an entry is published at. Date first so the archive sorts on disk. */
+/**
+ * The path an entry is published at.
+ *
+ * Date only, as /2026/08/18/. The headline is deliberately not in the URL.
+ *
+ * The reason is the morning notification. A static site cannot send one, so
+ * the push comes from the scheduled task, and for it to link straight to the
+ * day's card the URL has to be constructible from the date alone. A slug
+ * would require knowing the headline before it is written, which the sender
+ * does not.
+ *
+ * Two entries can share a date, which has already happened once, so a second
+ * entry on the same day takes a numbered suffix. The first keeps the clean
+ * path so the predictable form stays predictable.
+ */
 export function entryPath(entry) {
-  return `/entries/${entry.date}-${entry.slug}/`;
+  const [year, month, day] = entry.date.split('-');
+  const suffix = entry.dateIndex > 0 ? `${entry.dateIndex + 1}/` : '';
+  return `/${year}/${month}/${day}/${suffix}`;
 }
 
 /* -------------------------------------------------------------------------
@@ -456,4 +477,63 @@ ${terms
 </section>
 ${content}`,
   });
+}
+
+/**
+ * A standing redirect at /latest/ that always lands on the newest entry.
+ *
+ * This is the address the morning push notification should use. It never
+ * needs to know the date, it cannot go stale, and it survives an entry being
+ * unpublished. A meta refresh is used rather than a server rule because
+ * GitHub Pages serves static files and has no redirect layer.
+ *
+ * The canonical link points at the real entry so search engines index that
+ * rather than this, and the body carries a plain link for anyone whose
+ * browser blocks the refresh.
+ */
+export function renderLatestRedirect(entry) {
+  const target = url(entryPath(entry));
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="refresh" content="0; url=${escapeHtml(target)}">
+<link rel="canonical" href="${escapeHtml(`${ORIGIN}${target}`)}">
+<meta name="robots" content="noindex">
+<title>${escapeHtml(SITE_NAME)}</title>
+</head>
+<body>
+<p><a href="${escapeHtml(target)}">${escapeHtml(entry.headline)}</a></p>
+</body>
+</html>
+`;
+}
+
+/**
+ * The web app manifest, so adding the site to a phone home screen produces an
+ * app icon and a standalone window rather than a browser bookmark. This is
+ * most of what makes a notification feel like it opens an app.
+ */
+export function renderManifest() {
+  return JSON.stringify(
+    {
+      name: SITE_NAME,
+      short_name: 'Money Edit',
+      description: SITE_TAGLINE,
+      start_url: url('/latest/'),
+      scope: url('/'),
+      display: 'standalone',
+      background_color: '#06070A',
+      theme_color: '#06070A',
+      icons: [
+        // The SVG scales to any launcher size. The PNG is the fallback for
+        // platforms that will not accept SVG, iOS among them.
+        { src: url('assets/favicon.svg'), sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
+        { src: url('assets/icon.png'), sizes: '180x180', type: 'image/png', purpose: 'any' },
+        { src: url('assets/icon.png'), sizes: '180x180', type: 'image/png', purpose: 'maskable' },
+      ],
+    },
+    null,
+    2
+  );
 }
