@@ -1,0 +1,83 @@
+# Publish the site to GitHub Pages.
+#
+# Why this runs in CI rather than on the laptop. The entries are written by a
+# scheduled task every weekday morning, but the laptop is not reliably open,
+# so anything that needs a manual trigger gets missed. Running the build on a
+# schedule means the site keeps up with Notion regardless.
+#
+# This costs nothing. No language model runs here. The job calls the Notion
+# REST API and writes HTML, and Actions minutes are free on a public
+# repository. The earlier decision to avoid CI was about the cost of running
+# Claude on every build, which is a different thing and still stands.
+
+name: Publish
+
+on:
+  # Twice on weekdays. The entry is filed at 9:30am Eastern, so the first run
+  # picks up anything approved that morning and the second catches an
+  # afternoon approval the same day.
+  #
+  # Cron here is always UTC and does not follow daylight saving, so 15:00 UTC
+  # lands at 11:00 Eastern in summer and 10:00 in winter. Both are after the
+  # entry is filed, which is what matters.
+  schedule:
+    - cron: '0 15 * * 1-5'
+    - cron: '0 21 * * 1-5'
+
+  # Republish whenever the site code itself changes.
+  push:
+    branches: [main]
+
+  # The publish now button, for when an entry is promoted out of Draft and
+  # should not wait for the next scheduled run.
+  workflow_dispatch:
+
+# The minimum the deploy needs. Pages deployment uses OIDC, which is why
+# id-token is required.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never let two deploys race. Queue instead of cancelling, so a scheduled run
+# already uploading is allowed to finish.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build from Notion
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build the site
+        env:
+          # Set with: gh secret set NOTION_TOKEN
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+        run: npm run build
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    name: Deploy to Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
