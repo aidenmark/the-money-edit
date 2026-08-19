@@ -19,14 +19,24 @@ concurrency:
 
 jobs:
   test:
-    name: Test and build
+    name: Test and build (Node ${{ matrix.node }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['18.20.8', '22']
     steps:
       - uses: actions/checkout@v7
 
+      # Both ends of the supported range. The engines field allows 18.17, and
+      # the runner uses a current LTS, so both have to keep working. This
+      # matrix exists because a version specific bug already slipped through:
+      # `node --test test/` searched the directory on Node 18 but was read as
+      # a module path on Node 22, so the whole suite failed to run and only
+      # CI caught it.
       - uses: actions/setup-node@v7
         with:
-          node-version: '22'
+          node-version: ${{ matrix.node }}
           # No cache setting, because the project has no dependencies to cache.
 
       - name: Run tests
