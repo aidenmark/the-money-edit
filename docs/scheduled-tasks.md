@@ -7,13 +7,35 @@ whatever is in Notion into the site.
 Paste each into its own recurring task in claude.ai. They replace the single
 9:30am task.
 
-| Task | Runs | Writes |
-|---|---|---|
-| Opening Bell | Weekdays 9:00am Eastern | A short pre-market scan |
-| Closing Bell | Weekdays 5:15pm Eastern | The full recap of the session |
+| Task | Cron (UTC) | Eastern, summer | Eastern, winter | Writes |
+|---|---|---|---|---|
+| Opening Bell | `0 13 * * 1-5` | 9:00am | 8:00am | A short pre-market scan |
+| Closing Bell | `15 22 * * 1-5` | 6:15pm | 5:15pm | The full recap of the session |
+
+### Why those UTC times, and not the obvious ones
+
+Task cron runs on fixed UTC and does not follow daylight saving, so every
+schedule is two different Eastern times across the year. Both have to work, or
+the brief quietly degrades for five months.
+
+**Closing Bell must never fire before 5:00pm Eastern.** The journalism that
+explains a session publishes between 4:15 and 5:30pm. `15 21` looks right in
+summer, at 5:15pm, but becomes 4:15pm in winter, fifteen minutes after the
+close and before the good sources exist. `15 22` is 6:15pm in summer and
+5:15pm in winter, so it is always late enough. An hour of summer lateness for
+an evening read costs nothing.
+
+**Opening Bell is safe either way.** 8:00am in winter is still well inside
+pre-market, which opens at 4:00am, and the site rebuilds before the 9:30 bell
+in both seasons.
+
+Do not solve this with a calendar reminder to shift the times in November. A
+seasonal manual step is the failure mode this whole project is built to avoid.
+Pick times that hold year round instead.
 
 Both write into the same Notion database and are distinguished by the `Edition`
-property. Neither one waits for approval. Entries are filed as `Published`
+property, which already exists on the database with options `Opening Bell` and
+`Closing Bell`. Do not recreate it. Neither one waits for approval. Entries are filed as `Published`
 directly, so accuracy has to be enforced while writing rather than reviewed
 afterward.
 
@@ -230,6 +252,16 @@ To close that gap, add this to the end of both prompts. It needs a GitHub fine
 grained personal access token with **Contents: write** on
 `aidenmark/the-money-edit` and nothing else.
 
+**Never paste this token into a chat.** It would sit in the transcript
+permanently. Create it at github.com/settings/personal-access-tokens, set an
+expiry, and paste it straight into the task prompt in claude.ai yourself.
+
+Understand the tradeoff before doing this. The token lives in plaintext inside
+a stored prompt. Scoped to one repository with Contents write and nothing else,
+the worst case is someone committing to this repo, which is recoverable and not
+catastrophic. It is a reasonable trade for an instant rebuild, but it is a real
+one, and the cron path costs nothing and leaks nothing.
+
 ```
 After filing the entry, trigger the site rebuild:
 
@@ -243,6 +275,17 @@ curl -X POST \
 Until this is added the cron covers it, just less promptly.
 
 ---
+
+## Do not let a task "fix" the existing entries
+
+Three entries are already `Published` with `Edition` set to `Closing Bell`. A
+fourth, "S&P 500 closes at a record high" on Aug 14, is deliberately held at
+`Draft` with no edition. It is the project's first entry, it has an empty page
+body, and it duplicates a date already covered by a fuller writeup. It is kept
+rather than deleted because it is the entry that produced the timezone bug.
+
+If a task or an assistant offers to publish the drafts and backfill editions,
+decline. That work is done, and redoing it would republish the stub.
 
 ## Checking the result
 
