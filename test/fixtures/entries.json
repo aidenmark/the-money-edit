@@ -1,0 +1,72 @@
+{
+  "_comment": "Real entries captured from the Money Edit Notion database, reshaped into the payload the Notion API returns. These cover all three body formats the parser has to handle, so the build can run and be tested with no token and no network.",
+  "apiVersion": "2025-09-03",
+  "entries": [
+    {
+      "id": "3c08c06f-a3f4-812d-9bc6-c3fe86aaae83",
+      "notionUrl": "https://www.notion.so/3c08c06fa3f4812d9bc6c3fe86aaae83",
+      "headline": "Bond yields hit a 2007 high, tech slides",
+      "summary": "The 30-year Treasury yield climbed to about 5.30% on Tuesday, its highest level since 2007, and that pushed technology stocks lower. The Nasdaq 100 fell 1.7% while the S&P 500 slipped 0.5%, with chipmakers and optical networking companies taking the worst of it, including Marvell down 8% and Micron down 6%. When yields rise, borrowing gets more expensive and investors are willing to pay less today for profits a company might earn years from now, which hits fast growing tech hardest. For your own money, higher long term yields usually mean pricier mortgages and loans, but also better payouts on savings accounts, CDs, and bonds.",
+      "date": "2026-08-18",
+      "status": "Published",
+      "lastEdited": "2026-08-18T14:02:00.000Z",
+      "blocks": [
+        { "type": "heading_2", "heading_2": { "rich_text": [{ "plain_text": "What happened" }] } },
+        { "type": "paragraph", "paragraph": { "rich_text": [{ "plain_text": "The 30-year Treasury yield climbed to about 5.30% on Tuesday, its highest level since 2007, and that pushed technology stocks lower. The Nasdaq 100 fell 1.7% while the S&P 500 slipped 0.5%, with chipmakers and optical networking companies taking the worst of it, including Marvell down 8% and Micron down 6%." }] } },
+        { "type": "heading_2", "heading_2": { "rich_text": [{ "plain_text": "Why it happened" }] } },
+        { "type": "paragraph", "paragraph": { "rich_text": [{ "plain_text": "A Treasury yield is simply what the US government pays to borrow money, and it sets the tone for borrowing costs everywhere else. When that number rises, investors are willing to pay less today for profits a company might earn years from now, and tech valuations lean heavily on those far off profits. Rising yields also make it costlier to finance the enormous buildout of AI data centers, where nobody is certain when the payoff arrives. Oil moving higher on renewed US and Iran tensions added to the pressure." }] } },
+        { "type": "heading_2", "heading_2": { "rich_text": [{ "plain_text": "What it means for you" }] } },
+        { "type": "paragraph", "paragraph": { "rich_text": [{ "plain_text": "Higher long term yields tend to show up in your life as pricier mortgages, car loans, and credit card rates. The upside is that the same move usually means better payouts on savings accounts, CDs, and bonds. A one day slide in tech stocks is not a reason to change a long term plan, though it is a good reminder of why holding more than just tech matters." }] } },
+        { "type": "heading_2", "heading_2": { "rich_text": [{ "plain_text": "Key figures" }] } },
+        { "type": "bulleted_list_item", "bulleted_list_item": { "rich_text": [{ "plain_text": "S&P 500: down 0.5% to 7,703.78" }] } },
+        { "type": "bulleted_list_item", "bulleted_list_item": { "rich_text": [{ "plain_text": "Dow Jones Industrial Average: down 0.2% to 53,371.23" }] } },
+        { "type": "bulleted_list_item", "bulleted_list_item": { "rich_text": [{ "plain_text": "Nasdaq 100: down 1.7% to 29,475" }] } },
+        { "type": "bulleted_list_item", "bulleted_list_item": { "rich_text": [{ "plain_text": "30-year Treasury yield: 5.30%, highest since 2007" }] } },
+        { "type": "bulleted_list_item", "bulleted_list_item": { "rich_text": [{ "plain_text": "10-year Treasury yield: 4.72%" }] } },
+        { "type": "bulleted_list_item", "bulleted_list_item": { "rich_text": [{ "plain_text": "WTI crude: $85.67 a barrel, up 1.4%" }] } },
+        { "type": "heading_2", "heading_2": { "rich_text": [{ "plain_text": "Term of the day" }] } },
+        { "type": "paragraph", "paragraph": { "rich_text": [{ "plain_text": "Term of the day: Treasury yield. A Treasury yield is what the US government pays to borrow money, and it quietly sets the floor for mortgage rates, car loans, and savings account payouts across the whole economy." }] } },
+        { "type": "heading_2", "heading_2": { "rich_text": [{ "plain_text": "Source" }] } },
+        { "type": "paragraph", "paragraph": { "rich_text": [{ "plain_text": "Nvidia, AMD, Broadcom, Meta Slide as Bond Yields Surge", "href": "https://finance.yahoo.com/markets/stocks/articles/nvidia-amd-broadcom-meta-slide-154244427.html" }] } }
+      ]
+    },
+    {
+      "id": "3c08c06f-a3f4-815b-8add-e59712cc6458",
+      "notionUrl": "https://www.notion.so/3c08c06fa3f4815b8adde59712cc6458",
+      "headline": "Oil climbs on Iran tensions, stocks fall",
+      "summary": "Stocks fell Monday as oil prices moved higher on fading hopes for a US and Iran agreement, with the Dow down 249 points or 0.46% to 53,483 and the S&P 500 down 0.45% to 7,750. The 30-year Treasury yield stayed above 5.3%, its highest since 2007, which adds pressure on top of the geopolitical worry. Higher oil feeds into gas prices, shipping, and the cost of making and moving almost everything, so it usually turns up in what you pay at the pump and at the store within a few weeks.",
+      "date": "2026-08-17",
+      "status": "Published",
+      "lastEdited": "2026-08-17T14:02:00.000Z",
+      "blocks": [
+        { "type": "paragraph", "paragraph": { "rich_text": [{ "plain_text": "Stocks fell Monday as oil prices moved higher on fading hopes for a US and Iran agreement, with the Dow down 249 points or 0.46% to 53,483 and the S&P 500 down 0.45% to 7,750. The 30-year Treasury yield stayed above 5.3%, its highest since 2007, which adds pressure on top of the geopolitical worry. Higher oil feeds into gas prices, shipping, and the cost of making and moving almost everything, so it usually turns up in what you pay at the pump and at the store within a few weeks." }] } },
+        { "type": "paragraph", "paragraph": { "rich_text": [{ "plain_text": "Dow 53,483 down 0.46% · S&P 500 7,750.48 down 0.45% · Nasdaq roughly 26,650 lower · 10-year Treasury about 4.72% · 30-year Treasury above 5.3%" }] } },
+        { "type": "paragraph", "paragraph": { "rich_text": [{ "plain_text": "Term of the day. ", "annotations": { "bold": true } }, { "plain_text": "A basis point is one hundredth of a percentage point, so when you read that a yield rose 5 basis points, it moved 0.05%." }] } },
+        { "type": "paragraph", "paragraph": { "rich_text": [{ "plain_text": "Source: STL.News, Stock Market Trading Summary, Monday, August 17, 2026", "href": "https://www.stl.news/stock-market-trading-summary-monday-august-17th-2026/" }] } }
+      ]
+    },
+    {
+      "id": "3bd8c06f-a3f4-8155-96c1-cb51753effb5",
+      "notionUrl": "https://www.notion.so/3bd8c06fa3f4815596c1cb51753effb5",
+      "headline": "Retail sales fall, Broadcom drops on AI debt",
+      "summary": "US stocks slipped Friday after July retail sales unexpectedly fell 0.6% from the month before, which raised questions about how much strain shoppers are under. Broadcom dropped 6% after Bank of America analysts pushed back on a proposed $370 billion debt package tied to its AI buildout. Retail sales are one of the clearest read-outs on consumer health, and that matters because consumer spending drives roughly two thirds of the US economy, so a soft month tends to ripple into hiring and growth expectations.",
+      "date": "2026-08-14",
+      "status": "Published",
+      "lastEdited": "2026-08-14T14:02:00.000Z",
+      "blocks": [
+        { "type": "paragraph", "paragraph": { "rich_text": [{ "plain_text": "US stocks slipped Friday after July retail sales unexpectedly fell 0.6% from the month before, which raised questions about how much strain shoppers are under. Broadcom dropped 6% after Bank of America analysts pushed back on a proposed $370 billion debt package tied to its AI buildout." }] } },
+        { "type": "paragraph", "paragraph": { "rich_text": [{ "plain_text": "S&P 500 down 0.29% · Retail sales down 0.6% · Broadcom down 6%" }] } }
+      ]
+    },
+    {
+      "id": "3bd8c06f-a3f4-8184-adfd-cd77fd792870",
+      "notionUrl": "https://www.notion.so/3bd8c06fa3f48184adfdcd77fd792870",
+      "headline": "S&P 500 closes at a record high",
+      "summary": "The S&P 500 closed at a record high this week after inflation came in cooler than expected and oil prices slid, according to CNBC.",
+      "date": "2026-08-14",
+      "status": "Draft",
+      "lastEdited": "2026-08-15T02:41:00.000Z",
+      "blocks": []
+    }
+  ]
+}
