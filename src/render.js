@@ -162,8 +162,8 @@ export function renderCard(entry, { previous = null, next = null } = {}) {
 
   /* The card is a three part grid.
    *
-   *   head   Date, headline, and lede. Spans the full width, so the entry
-   *          opens the way a page opens rather than as a column.
+   *   head   Date and headline. Spans the full width, so the entry opens the
+   *          way a page opens rather than as a column.
    *   rail   Key figures. Second column on a wide screen, where it stays in
    *          view while the prose scrolls past it.
    *   main   The writing, the term, and the source. First column.
@@ -173,16 +173,18 @@ export function renderCard(entry, { previous = null, next = null } = {}) {
    * belong directly under the lede there, not stranded at the bottom of the
    * page. Grid placement puts it back on the right at desktop width, so the
    * reading order is correct at both sizes without duplicating any markup.
+   *
+   * The Content summary is deliberately not shown on the card. It is a
+   * condensation of the same writeup the page body already contains, so
+   * rendering both printed the opening paragraph twice on every structured
+   * entry. The summary still does real work elsewhere, as the meta and
+   * OpenGraph description, the archive listing, and the RSS item, which is
+   * why it is fetched rather than dropped.
    */
   parts.push(`<article class="card${hasRail ? '' : ' card--no-rail'}">
 <header class="card-head">
 <p class="card-date rise" style="--step:${step++}">${escapeHtml(formatLongDate(entry.date))}</p>
-<h1 class="card-headline rise" style="--step:${step++}">${escapeHtml(entry.headline)}</h1>${
-    entry.summary
-      ? `
-<p class="card-lede rise" style="--step:${step++}">${escapeHtml(entry.summary)}</p>`
-      : ''
-  }
+<h1 class="card-headline rise" style="--step:${step++}">${escapeHtml(entry.headline)}</h1>
 </header>`);
 
   if (hasRail) {

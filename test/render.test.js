@@ -111,3 +111,22 @@ test('entry paths are date first so they sort chronologically', () => {
     '/entries/2026-08-18-bond-yields/'
   );
 });
+
+test('the summary is not printed on the card when the body already contains it', () => {
+  // The Content property is a condensation of the same writeup the page body
+  // carries, so rendering both put the opening paragraph on screen twice on
+  // every structured entry. The summary still has to reach the metadata.
+  const html = renderCard(withFigures);
+  const body = html.slice(html.indexOf('<body'));
+  const head = html.slice(0, html.indexOf('<body'));
+
+  assert.ok(!body.includes('card-lede'), 'the lede element should not render');
+  assert.ok(
+    !body.includes(withFigures.summary),
+    'the summary should not appear in the visible card'
+  );
+  assert.ok(
+    head.includes('og:description'),
+    'the summary should still be carried in the page metadata'
+  );
+});
