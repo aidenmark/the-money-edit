@@ -1,0 +1,48 @@
+# Fast feedback on every change.
+#
+# This workflow deliberately needs no secrets. It builds from the committed
+# fixtures rather than from Notion, which means it runs on any branch, proves
+# the templates render, and cannot be broken by a Notion outage or an expired
+# token. Publishing is a separate workflow with a separate trigger.
+
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+# A new push to the same branch makes an in flight run pointless, so cancel it.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test and build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          # No cache setting, because the project has no dependencies to cache.
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build from fixtures
+        run: npm run build:offline
+
+      # A build that silently produces nothing would still exit zero, so the
+      # important files are checked for explicitly.
+      - name: Verify the expected output exists
+        run: |
+          for file in index.html glossary/index.html feed.xml sitemap.xml 404.html assets/styles.css; do
+            if [ ! -s "dist/$file" ]; then
+              echo "Missing or empty: dist/$file"
+              exit 1
+            fi
+          done
+          echo "Built $(find dist -name index.html | wc -l | tr -d ' ') pages."
