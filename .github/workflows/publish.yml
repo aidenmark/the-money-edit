@@ -39,6 +39,14 @@ on:
     - cron: '20 13 * * 1-5'
     - cron: '10 14 * * 1-5'
     - cron: '20 14 * * 1-5'
+    # Late morning catches, for a research run that takes longer than usual.
+    # Without these, a winter morning task running past 9:20 Eastern would
+    # leave the card unpublished until the evening pass at 4:30pm, because
+    # the next cron after 14:20 UTC is 21:30. Summer is already covered by
+    # the off season pair at 14:10 and 14:20, which land at 10:10 and 10:20
+    # Eastern. These two give winter the same safety net.
+    - cron: '35 14 * * 1-5'
+    - cron: '0 15 * * 1-5'
     - cron: '30 21 * * 1-5'
     - cron: '45 21 * * 1-5'
     - cron: '30 22 * * 1-5'

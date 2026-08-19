@@ -39,8 +39,31 @@ const ENTRY_TIMES = [
 /** The first build that runs after a given moment. */
 const nextBuildAfter = (utcMinutes) => buildTimes.find((time) => time > utcMinutes);
 
-test('the workflow lists eight publish crons, two per edition per season', () => {
-  assert.equal(buildTimes.length, 8);
+test('the workflow lists ten publish crons', () => {
+  // Four morning, two late morning catches, four evening.
+  assert.equal(buildTimes.length, 10);
+});
+
+test('no entry can wait more than an hour for a build, in either season', () => {
+  // A research run that overruns must not strand the card. The winter morning
+  // used to fall through to the 4:30pm evening pass, a seven hour gap, because
+  // the next cron after 14:20 UTC was 21:30.
+  for (const { edition, season, utc } of ENTRY_TIMES) {
+    const covering = buildTimes.filter((t) => t > utc && t <= utc + 120);
+    assert.ok(
+      covering.length >= 2,
+      `${edition} in ${season} has only ${covering.length} build(s) in the two hours after it`
+    );
+
+    // And no gap larger than an hour inside that window.
+    const points = [utc, ...covering];
+    for (let i = 1; i < points.length; i += 1) {
+      assert.ok(
+        points[i] - points[i - 1] <= 60,
+        `${edition} in ${season} has a ${points[i] - points[i - 1]} minute gap in build coverage`
+      );
+    }
+  }
 });
 
 for (const { edition, season, utc, offset } of ENTRY_TIMES) {
