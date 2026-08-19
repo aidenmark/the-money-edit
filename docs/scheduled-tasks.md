@@ -333,37 +333,70 @@ https://aidenmark.github.io/the-money-edit/latest/
 
 ---
 
-## Optional, once you want the card live within a minute
+## Rebuild trigger, required for the card to match the notification
 
-The site rebuilds on a cron shortly after each edition is written. GitHub does
-not guarantee cron punctuality, so the card can lag the notification by ten
-minutes or more under load.
+Each prompt ends by pushing a notification whose link points at `/latest/`. That
+link is only honest if the site has already rebuilt. It rebuilds on a cron, and
+GitHub does not guarantee cron punctuality.
 
-To close that gap, add this to the end of both prompts. It needs a GitHub fine
-grained personal access token with **Contents: write** on
-`aidenmark/the-money-edit` and nothing else.
+On 2026-08-19, the first day both editions ran live, every scheduled run started
+between 29 and 42 minutes behind its cron time:
+
+| Cron (UTC) | Actually started | Late by |
+|---|---|---|
+| 13:10 | 13:52 | 42 min |
+| 13:20 | 13:59 | 39 min |
+| 14:10 | 14:51 | 41 min |
+| 14:20 | 14:56 | 36 min |
+| 14:35 | 15:04 | 29 min |
+| 15:00 | 15:31 | 31 min |
+
+The Opening Bell entry was filed at 13:22 UTC and the notification went out
+immediately. The card did not deploy until 13:53. For 31 minutes the push said
+the edition was published and `/latest/` still showed the previous evening's
+Closing Bell.
+
+Thirty minutes of a notification pointing at stale content is not an acceptable
+default, so the trigger below is part of the setup rather than an enhancement.
+It fires a `repository_dispatch` that the publish workflow listens for, and the
+run starts within seconds.
+
+### What it needs
+
+A GitHub fine grained personal access token with **Contents: write** on
+`aidenmark/the-money-edit` and nothing else, with an expiry set.
 
 **Never paste this token into a chat.** It would sit in the transcript
-permanently. Create it at github.com/settings/personal-access-tokens, set an
-expiry, and paste it straight into the task prompt in claude.ai yourself.
+permanently. Create it at github.com/settings/personal-access-tokens and paste
+it straight into the task prompt in claude.ai yourself.
 
-Understand the tradeoff before doing this. The token lives in plaintext inside
-a stored prompt. Scoped to one repository with Contents write and nothing else,
-the worst case is someone committing to this repo, which is recoverable and not
-catastrophic. It is a reasonable trade for an instant rebuild, but it is a real
-one, and the cron path costs nothing and leaks nothing.
+Add this to the end of **all four** prompts, not just the two that fire in the
+current season. In the other half of the year the redundant firing of each pair
+becomes the real one, and a trigger present on only one of the pair would
+silently stop working at the daylight saving boundary. The redundant firings
+stop at the duplicate check long before reaching this line, so there is no risk
+of triggering twice.
 
 ```
 After filing the entry, trigger the site rebuild:
 
-curl -X POST \
-  -H "Authorization: Bearer YOUR_TOKEN_HERE" \
-  -H "Accept: application/vnd.github+json" \
-  https://api.github.com/repos/aidenmark/the-money-edit/dispatches \
-  -d '{"event_type":"entry-published"}'
+curl -X POST -H "Authorization: Bearer YOUR_TOKEN_HERE" -H "Accept: application/vnd.github+json" https://api.github.com/repos/aidenmark/the-money-edit/dispatches -d '{"event_type":"entry-published"}'
 ```
 
-Until this is added the cron covers it, just less promptly.
+The curl is deliberately on one line. The multi line form with trailing
+backslashes is easy to mangle when pasting into a web textarea, and a broken
+line here fails silently.
+
+### The tradeoff, stated plainly
+
+The token lives in plaintext inside four stored prompts. Scoped to one
+repository with Contents write and nothing else, the worst case is someone
+committing to this repo, which is recoverable and not catastrophic. That is the
+price of the card being live when the notification arrives.
+
+When the token expires the curl starts failing silently and the site falls back
+to the cron path, roughly half an hour behind. Nothing breaks, it just gets slow
+again, so put the expiry date on a calendar.
 
 ---
 
