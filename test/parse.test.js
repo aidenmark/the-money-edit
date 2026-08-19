@@ -34,7 +34,8 @@ test('structured entry reads key figures out of the bullet list', () => {
   assert.equal(parsed.figures.length, 6);
   assert.deepEqual(parsed.figures[0], {
     label: 'S&P 500',
-    value: 'down 0.5% to 7,703.78',
+    // The leading "down" is dropped because the tile renders an arrow.
+    value: '0.5% to 7,703.78',
     direction: 'down',
   });
   // A figure with no movement word should not be tinted.
@@ -99,7 +100,7 @@ test('an ampersand in the source text is escaped, not passed through raw', () =>
 test('parseFigure splits on a colon when one is present', () => {
   assert.deepEqual(parseFigure('Nasdaq 100: down 1.7% to 29,475'), {
     label: 'Nasdaq 100',
-    value: 'down 1.7% to 29,475',
+    value: '1.7% to 29,475',
     direction: 'down',
   });
 });
@@ -115,6 +116,13 @@ test('parseFigure finds the value boundary when there is no colon', () => {
 
 test('parseFigure recognises an upward move', () => {
   assert.equal(parseFigure('WTI crude: $85.67 a barrel, up 1.4%').direction, 'up');
+});
+
+test('only a leading direction word is dropped, not one mid sentence', () => {
+  // The arrow replaces a leading word. Wording later in the value is part of
+  // the sentence and has to survive.
+  assert.equal(parseFigure('WTI crude: $85.67 a barrel, up 1.4%').value, '$85.67 a barrel, up 1.4%');
+  assert.equal(parseFigure('S&P 500: down 0.5% to 7,703.78').value, '0.5% to 7,703.78');
 });
 
 test('parseTerm handles the explicit naming form', () => {
