@@ -22,7 +22,9 @@ import {
   shortenLabel,
   renderLatestRedirect,
   renderManifest,
+  renderFullArchive,
 } from '../src/render.js';
+import { normalizeDashes } from '../src/util.js';
 
 /** Match how the renderer escapes text, so assertions compare like with like. */
 const escapeForTest = (text) => String(text).replace(/&/g, '&amp;');
@@ -226,4 +228,74 @@ test('the summary is not printed on the card when the body already contains it',
     head.includes('og:description'),
     'the summary should still be carried in the page metadata'
   );
+});
+
+test('a source article title is reproduced exactly as published', () => {
+  // The house style rule covers writing this project produces. It does not
+  // cover quoted headlines from other publications, which are reproduced
+  // verbatim. Rewriting someone else's title to match our style would be a
+  // worse problem than the dash.
+  const withSource = parseEntry({
+    ...fixtures.entries[0],
+    slug: 's',
+    blocks: [
+      {
+        type: 'paragraph',
+        paragraph: {
+          rich_text: [
+            {
+              plain_text: 'Source: Yahoo Finance \u2014 Stock Market Today, Aug. 14',
+              href: 'https://example.com/a',
+            },
+          ],
+        },
+      },
+    ],
+  });
+
+  const html = renderCard(withSource);
+  assert.match(html, /Yahoo Finance \u2014 Stock Market Today/);
+});
+
+test('a dash in our own writing is still normalised as a safety net', () => {
+  // The task is instructed not to use them, so this should rarely fire, but
+  // the headline and the prose are ours and the rule applies to them.
+  const ours = parseEntry({
+    id: 'x',
+    headline: 'Yields climb \u2014 tech slides',
+    summary: 'Rates rose \u2014 stocks fell.',
+    date: '2026-08-20',
+    status: 'Published',
+    slug: 'x',
+    blocks: [],
+  });
+
+  const html = renderCard(ours);
+  assert.match(html, /Yields climb, tech slides/);
+  assert.ok(!/climb \u2014 tech/.test(html));
+});
+
+test('a dash joining a range becomes a hyphen, not a comma', () => {
+  // A year range needs a hyphen. A comma there would be wrong.
+  assert.equal(normalizeDashes('the 1990–2000 boom'), 'the 1990-2000 boom');
+  assert.equal(normalizeDashes('Yahoo — Markets'), 'Yahoo, Markets');
+});
+
+test('the front page links to the complete archive only when entries overflow', () => {
+  // Without the link, an entry older than the window would be reachable only
+  // through the previous and next chain.
+  assert.ok(!renderArchive(entries, { olderCount: 0 }).includes('archive-more'));
+
+  const withOlder = renderArchive(entries, { olderCount: 12 });
+  assert.match(withOlder, /class="archive-more/);
+  assert.match(withOlder, new RegExp(`See all ${entries.length + 12} entries`));
+});
+
+test('the complete archive groups every entry by month', () => {
+  const html = renderFullArchive(entries);
+
+  assert.match(html, /August 2026/);
+  for (const entry of entries) {
+    assert.ok(html.includes(escapeForTest(entry.headline)), `missing ${entry.headline}`);
+  }
 });

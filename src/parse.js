@@ -16,7 +16,7 @@
  * entries render richer, and nothing needs backfilling by hand.
  */
 
-import { escapeHtml, slugify } from './util.js';
+import { escapeHtml, escapeText, slugify } from './util.js';
 import { plainText, firstLink } from './notion.js';
 
 /** Section headings the card renders in a fixed order, whatever Notion says. */
@@ -185,7 +185,7 @@ export function richTextToHtml(richText = []) {
   return richText
     .map((piece) => {
       const annotations = piece?.annotations ?? {};
-      let html = escapeHtml(piece?.plain_text ?? '');
+      let html = escapeText(piece?.plain_text ?? '');
       if (!html) return '';
       if (annotations.code) html = `<code>${html}</code>`;
       if (annotations.bold) html = `<strong>${html}</strong>`;
@@ -302,7 +302,7 @@ export function parseEntry(entry) {
   // If the body carried no prose at all, fall back to the Content property so
   // that even a blank page still renders a readable card.
   if (prose.size === 0 && entry.summary) {
-    addProse('what-happened', `<p>${escapeHtml(entry.summary)}</p>`);
+    addProse('what-happened', `<p>${escapeText(entry.summary)}</p>`);
   }
 
   const sections = SECTION_ORDER.filter((key) => prose.has(key)).map((key) => ({

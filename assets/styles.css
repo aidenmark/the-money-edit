@@ -959,3 +959,18 @@ code {
   .section-body, .card-lede { color: #333; }
   .figures, .figure { background: #fff; border-color: #ccc; }
 }
+
+/* The link from the windowed front page to the complete archive. */
+.archive-more {
+  margin: 1.75rem 0 0;
+  font-family: var(--font-mono);
+  font-size: var(--size-micro);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+.archive-more a {
+  color: var(--text-mute);
+  text-decoration: none;
+  transition: color 0.25s ease;
+}
+.archive-more a:hover { color: var(--accent); }

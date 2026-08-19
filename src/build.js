@@ -28,6 +28,7 @@ import {
   renderCard,
   renderArchive,
   renderGlossary,
+  renderFullArchive,
   renderLatestRedirect,
   renderManifest,
   entryPath,
@@ -414,7 +415,17 @@ async function main() {
     (entry) => daysBetween(entry.date, today) <= ARCHIVE_WINDOW_DAYS
   );
 
-  await write('index.html', renderArchive(recent, { windowDays: ARCHIVE_WINDOW_DAYS }));
+  const older = published.length - recent.length;
+  await write(
+    'index.html',
+    renderArchive(recent, { windowDays: ARCHIVE_WINDOW_DAYS, olderCount: older })
+  );
+
+  // Built unconditionally rather than only when the window overflows, so the
+  // address is stable and never 404s once someone has linked to it.
+  if (published.length > 0) {
+    await write('archive/index.html', renderFullArchive(published));
+  }
   await write(
     'glossary/index.html',
     renderGlossary(collectGlossary(published), { latestDate: published[0]?.date ?? null })
@@ -433,7 +444,7 @@ async function main() {
     'sitemap.xml',
     // /latest/ is deliberately excluded. It is a redirect, and indexing it
     // would compete with the entry it points at.
-    renderSitemap(['/', '/glossary/', ...published.map(entryPath)])
+    renderSitemap(['/', '/archive/', '/glossary/', ...published.map(entryPath)])
   );
   await write('robots.txt', `User-agent: *\nAllow: /\nSitemap: ${ORIGIN}${url('sitemap.xml')}\n`);
 

@@ -10,7 +10,7 @@
  * means the site works with scripting disabled and has nothing to hydrate.
  */
 
-import { escapeHtml, formatLongDate, formatShortDate, stableHash } from './util.js';
+import { escapeHtml, escapeText, formatLongDate, formatShortDate, stableHash } from './util.js';
 
 /**
  * Where the site is served from.
@@ -78,14 +78,14 @@ export function layout({
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${escapeHtml(fullTitle)}</title>
-<meta name="description" content="${escapeHtml(description)}">
+<title>${escapeText(fullTitle)}</title>
+<meta name="description" content="${escapeText(description)}">
 <link rel="canonical" href="${escapeHtml(canonical)}">
 
 <meta property="og:type" content="${canonicalPath === '/' ? 'website' : 'article'}">
-<meta property="og:site_name" content="${escapeHtml(SITE_NAME)}">
-<meta property="og:title" content="${escapeHtml(title)}">
-<meta property="og:description" content="${escapeHtml(description)}">
+<meta property="og:site_name" content="${escapeText(SITE_NAME)}">
+<meta property="og:title" content="${escapeText(title)}">
+<meta property="og:description" content="${escapeText(description)}">
 <meta property="og:url" content="${escapeHtml(canonical)}">
 <meta name="twitter:card" content="summary_large_image">
 
@@ -102,7 +102,7 @@ export function layout({
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Money Edit">
-<link rel="alternate" type="application/rss+xml" title="${escapeHtml(SITE_NAME)}" href="${url('feed.xml')}">
+<link rel="alternate" type="application/rss+xml" title="${escapeText(SITE_NAME)}" href="${url('feed.xml')}">
 </head>
 <body class="${escapeHtml(`${accent.className} ${bodyClass}`.trim())}" style="--bloom-x:${accent.bloomX};--bloom-y:${accent.bloomY}">
 <a class="skip-link" href="#main">Skip to content</a>
@@ -126,7 +126,7 @@ function masthead(current) {
     `<a href="${url(href)}"${current === key ? ' aria-current="page"' : ''}>${label}</a>`;
 
   return `<header class="masthead">
-<a class="wordmark" href="${url('/')}">${escapeHtml(SITE_NAME)}</a>
+<a class="wordmark" href="${url('/')}">${escapeText(SITE_NAME)}</a>
 <nav class="masthead-nav" aria-label="Sections">
 ${link('/', 'Archive', 'archive')}
 ${link('/glossary/', 'Glossary', 'glossary')}
@@ -136,7 +136,7 @@ ${link('/glossary/', 'Glossary', 'glossary')}
 
 function footer() {
   return `<footer class="site-footer">
-<span>${escapeHtml(SITE_NAME)}</span>
+<span>${escapeText(SITE_NAME)}</span>
 <span>Written daily. Published from Notion.</span>
 </footer>`;
 }
@@ -192,7 +192,7 @@ export function renderCard(entry, { previous = null, next = null } = {}) {
 <p class="bell-strip">
 <span class="bell-dot" aria-hidden="true"></span>
 <span id="bell-heading">Opening bell</span>
-<time datetime="${escapeHtml(entry.date)}">${escapeHtml(formatLongDate(entry.date))}</time>
+<time datetime="${escapeHtml(entry.date)}">${escapeText(formatLongDate(entry.date))}</time>
 </p>
 <div class="tape">
 ${headline.map(tapeTile).join('\n')}
@@ -207,13 +207,13 @@ ${rest.map(restRow).join('\n')}
 </section>`);
   }
 
-  const story = [`<h1 class="entry-headline">${escapeHtml(entry.headline)}</h1>`];
+  const story = [`<h1 class="entry-headline">${escapeText(entry.headline)}</h1>`];
   for (const section of entry.sections) {
     // "What it means for you" is the reason this project exists, so it is
     // lifted out of the run of prose rather than being the third of three.
     const payoff = section.key === 'what-it-means' ? ' section--payoff' : '';
     story.push(`<section class="section${payoff}">
-<h2 class="section-label">${escapeHtml(section.label)}</h2>
+<h2 class="section-label">${escapeText(section.label)}</h2>
 <div class="section-body">${section.html}</div>
 </section>`);
   }
@@ -224,8 +224,8 @@ ${story.join('\n')}
   if (entry.term) {
     parts.push(`<aside ${rise().replace('widget', 'widget widget--term')}>
 <p class="term-label">Term of the day</p>
-<h2 class="term-name">${escapeHtml(entry.term.term)}</h2>
-<p class="term-definition">${escapeHtml(entry.term.definition)}</p>
+<h2 class="term-name">${escapeText(entry.term.term)}</h2>
+<p class="term-definition">${escapeText(entry.term.definition)}</p>
 </aside>`);
   }
 
@@ -337,17 +337,17 @@ export function shortenLabel(label) {
 function tapeTile(figure) {
   const { level, change } = splitFigure(figure);
   return `<div class="tape-tile" data-direction="${escapeHtml(figure.direction)}">
-<span class="tape-label" title="${escapeHtml(figure.label)}">${escapeHtml(shortenLabel(figure.label))}</span>
-<span class="tape-value">${escapeHtml(level)}</span>${
-    change ? `\n<span class="tape-change">${escapeHtml(change)}</span>` : ''
+<span class="tape-label" title="${escapeText(figure.label)}">${escapeText(shortenLabel(figure.label))}</span>
+<span class="tape-value">${escapeText(level)}</span>${
+    change ? `\n<span class="tape-change">${escapeText(change)}</span>` : ''
   }
 </div>`;
 }
 
 function restRow(figure) {
   return `<div class="bell-row" data-direction="${escapeHtml(figure.direction)}">
-<span class="bell-row-label">${escapeHtml(figure.label)}</span>
-<span class="bell-row-value">${escapeHtml(figure.value)}</span>
+<span class="bell-row-label">${escapeText(figure.label)}</span>
+<span class="bell-row-value">${escapeText(figure.value)}</span>
 </div>`;
 }
 
@@ -362,7 +362,7 @@ function navLink(entry, direction) {
   const label = direction === 'previous' ? 'Previous' : 'Next';
   return `<a class="card-nav-link is-${direction}" href="${url(entryPath(entry))}">
 <span class="card-nav-direction">${label}</span>
-<span class="card-nav-title">${escapeHtml(entry.headline)}</span>
+<span class="card-nav-title">${escapeText(entry.headline)}</span>
 </a>`;
 }
 
@@ -370,12 +370,13 @@ function navLink(entry, direction) {
    Archive index
    ------------------------------------------------------------------------- */
 
-export function renderArchive(entries, { windowDays = 30 } = {}) {
+export function renderArchive(entries, { windowDays = 30, olderCount = 0 } = {}) {
   // The whole site takes its tone from the most recent entry, so the palette
   // shifts day to day rather than staying fixed.
   const accent = accentFor(entries[0]?.date);
 
-  const content = entries.length === 0 ? emptyState() : archiveList(entries, windowDays);
+  const content =
+    entries.length === 0 ? emptyState() : archiveList(entries, windowDays, olderCount);
 
   return layout({
     title: SITE_NAME,
@@ -386,24 +387,34 @@ export function renderArchive(entries, { windowDays = 30 } = {}) {
     currentNav: 'archive',
     content: `<section class="hero rise" style="--step:0">
 <h1 class="hero-title">The Money Edit</h1>
-<p class="hero-tagline">${escapeHtml(SITE_TAGLINE)}</p>
+<p class="hero-tagline">${escapeText(SITE_TAGLINE)}</p>
 </section>
 ${content}`,
   });
 }
 
-function archiveList(entries, windowDays) {
+function archiveList(entries, windowDays, olderCount = 0) {
   const rows = entries
     .map(
       (entry, index) => `<li class="archive-item rise" style="--step:${index + 1}">
 <a class="archive-link" href="${url(entryPath(entry))}">
-<span class="archive-date">${escapeHtml(formatShortDate(entry.date))}</span>
-<span class="archive-title">${escapeHtml(entry.headline)}</span>
+<span class="archive-date">${escapeText(formatShortDate(entry.date))}</span>
+<span class="archive-title">${escapeText(entry.headline)}</span>
 <span class="archive-arrow" aria-hidden="true">&rarr;</span>
 </a>
 </li>`
     )
     .join('\n');
+
+  // Anything past the window still exists and still has a page. Without this
+  // link the only route to it would be the previous and next chain, which is
+  // not a way anyone finds a three month old entry.
+  const more =
+    olderCount > 0
+      ? `\n<p class="archive-more rise" style="--step:${entries.length + 2}">
+<a href="${url('/archive/')}">See all ${entries.length + olderCount} entries &rarr;</a>
+</p>`
+      : '';
 
   return `<div class="archive-heading rise" style="--step:1">
 <h2>Recent entries</h2>
@@ -413,7 +424,77 @@ function archiveList(entries, windowDays) {
 </div>
 <ul class="archive-list">
 ${rows}
-</ul>`;
+</ul>${more}`;
+}
+
+/**
+ * The complete archive, every entry ever published, grouped by month.
+ *
+ * The front page deliberately shows only a window, because a landing page
+ * listing two years of entries is not a landing page. This is where the rest
+ * lives, and it is the only page that grows without bound, which is why it
+ * groups by month rather than running as one flat list.
+ */
+export function renderFullArchive(entries) {
+  const accent = accentFor(entries[0]?.date);
+
+  // Entries arrive newest first, so the month keys come out in order already.
+  const months = new Map();
+  for (const entry of entries) {
+    const key = entry.date.slice(0, 7);
+    if (!months.has(key)) months.set(key, []);
+    months.get(key).push(entry);
+  }
+
+  const sections = [...months.entries()]
+    .map(
+      ([month, group], index) => `<section class="rise" style="--step:${index + 1}">
+<div class="archive-heading">
+<h2>${escapeText(formatMonth(month))}</h2>
+<span class="archive-count">${group.length} ${group.length === 1 ? 'entry' : 'entries'}</span>
+</div>
+<ul class="archive-list">
+${group
+  .map(
+    (entry) => `<li class="archive-item">
+<a class="archive-link" href="${url(entryPath(entry))}">
+<span class="archive-date">${escapeText(formatShortDate(entry.date))}</span>
+<span class="archive-title">${escapeText(entry.headline)}</span>
+<span class="archive-arrow" aria-hidden="true">&rarr;</span>
+</a>
+</li>`
+  )
+  .join('\n')}
+</ul>
+</section>`
+    )
+    .join('\n');
+
+  return layout({
+    title: 'All entries',
+    description: `Every entry of ${SITE_NAME}, grouped by month.`,
+    canonicalPath: '/archive/',
+    accent,
+    bodyClass: 'is-archive',
+    currentNav: 'archive',
+    content: `<section class="hero rise" style="--step:0">
+<h1 class="hero-title">All entries</h1>
+<p class="hero-tagline">${entries.length} ${
+      entries.length === 1 ? 'entry' : 'entries'
+    } so far, newest first.</p>
+</section>
+${sections}`,
+  });
+}
+
+/** "2026-08" becomes "August 2026". Used as the month heading. */
+function formatMonth(yearMonth) {
+  const [year, month] = yearMonth.split('-').map(Number);
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: 'UTC',
+    month: 'long',
+    year: 'numeric',
+  }).format(new Date(Date.UTC(year, month - 1, 1)));
 }
 
 /**
@@ -453,8 +534,8 @@ export function renderGlossary(terms, { latestDate = null } = {}) {
 ${terms
   .map(
     (item, index) => `<li class="glossary-item rise" style="--step:${index + 1}">
-<h2 class="glossary-term">${escapeHtml(item.term)}</h2>
-<p class="glossary-definition">${escapeHtml(item.definition)}</p>
+<h2 class="glossary-term">${escapeText(item.term)}</h2>
+<p class="glossary-definition">${escapeText(item.definition)}</p>
 <a class="glossary-source" href="${url(entryPath(item.entry))}">Defined ${escapeHtml(
       formatLongDate(item.entry.date)
     )}</a>
@@ -500,10 +581,10 @@ export function renderLatestRedirect(entry) {
 <meta http-equiv="refresh" content="0; url=${escapeHtml(target)}">
 <link rel="canonical" href="${escapeHtml(`${ORIGIN}${target}`)}">
 <meta name="robots" content="noindex">
-<title>${escapeHtml(SITE_NAME)}</title>
+<title>${escapeText(SITE_NAME)}</title>
 </head>
 <body>
-<p><a href="${escapeHtml(target)}">${escapeHtml(entry.headline)}</a></p>
+<p><a href="${escapeHtml(target)}">${escapeText(entry.headline)}</a></p>
 </body>
 </html>
 `;
