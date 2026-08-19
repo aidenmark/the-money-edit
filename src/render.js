@@ -33,6 +33,9 @@ export const ORIGIN = process.env.SITE_ORIGIN ?? 'https://aidenmark.github.io';
 
 export const SITE_NAME = 'The Money Edit';
 
+/** Sections promoted out of the run of prose, one per edition. */
+const PAYOFF_SECTIONS = new Set(['what-it-means', 'what-to-watch']);
+
 
 export const SITE_TAGLINE =
   'A daily read on markets and money, written plainly, so you can tell what it means for yours.';
@@ -246,9 +249,11 @@ ${rest.map(restRow).join('\n')}
 
   const story = [`<h1 class="entry-headline">${escapeText(entry.headline)}</h1>`];
   for (const section of entry.sections) {
-    // "What it means for you" is the reason this project exists, so it is
-    // lifted out of the run of prose rather than being the third of three.
-    const payoff = section.key === 'what-it-means' ? ' section--payoff' : '';
+    // Each edition has one section that is the reason to read it, and that
+    // section is lifted out of the run of prose rather than sitting as just
+    // another heading. In the evening it is what the day means for your money.
+    // In the morning it is what to watch when the bell rings.
+    const payoff = PAYOFF_SECTIONS.has(section.key) ? ' section--payoff' : '';
     story.push(`<section class="section${payoff}">
 <h2 class="section-label">${escapeText(section.label)}</h2>
 <div class="section-body">${section.html}</div>

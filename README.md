@@ -98,6 +98,17 @@ The separation that matters most is `notion.js`. Everything downstream works wit
 
 ---
 
+## The scheduled tasks
+
+Two recurring tasks in claude.ai write the entries, one per edition. Their
+prompts live in [`docs/scheduled-tasks.md`](docs/scheduled-tasks.md), which is
+the thing to edit when you want to change what gets written.
+
+| Task | Runs | Writes |
+|---|---|---|
+| Opening Bell | Weekdays 9:00am Eastern | A short pre-market scan |
+| Closing Bell | Weekdays 5:15pm Eastern | The full recap of the session |
+
 ## The entry format
 
 The parser accepts three shapes, because the scheduled task's output changed over time and older entries still have to render. Going forward, write this one.
