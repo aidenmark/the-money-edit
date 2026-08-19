@@ -157,24 +157,46 @@ export function renderCard(entry, { previous = null, next = null } = {}) {
   const accent = accentFor(entry.date);
   let step = 0;
 
+  const hasRail = entry.figures.length > 0;
   const parts = [];
 
-  parts.push(`<article class="card">
+  /* The card is a three part grid.
+   *
+   *   head   Date, headline, and lede. Spans the full width, so the entry
+   *          opens the way a page opens rather than as a column.
+   *   rail   Key figures. Second column on a wide screen, where it stays in
+   *          view while the prose scrolls past it.
+   *   main   The writing, the term, and the source. First column.
+   *
+   * The rail is emitted before main in the source rather than after. On a
+   * phone the grid collapses to one column in document order, and figures
+   * belong directly under the lede there, not stranded at the bottom of the
+   * page. Grid placement puts it back on the right at desktop width, so the
+   * reading order is correct at both sizes without duplicating any markup.
+   */
+  parts.push(`<article class="card${hasRail ? '' : ' card--no-rail'}">
+<header class="card-head">
 <p class="card-date rise" style="--step:${step++}">${escapeHtml(formatLongDate(entry.date))}</p>
-<h1 class="card-headline rise" style="--step:${step++}">${escapeHtml(entry.headline)}</h1>`);
-
-  if (entry.summary) {
-    parts.push(`<p class="card-lede rise" style="--step:${step++}">${escapeHtml(entry.summary)}</p>`);
+<h1 class="card-headline rise" style="--step:${step++}">${escapeHtml(entry.headline)}</h1>${
+    entry.summary
+      ? `
+<p class="card-lede rise" style="--step:${step++}">${escapeHtml(entry.summary)}</p>`
+      : ''
   }
+</header>`);
 
-  if (entry.figures.length > 0) {
-    parts.push(`<section class="figures rise" style="--step:${step++}" aria-labelledby="figures-heading">
+  if (hasRail) {
+    parts.push(`<aside class="card-rail rise" style="--step:${step++}" aria-labelledby="figures-heading">
+<section class="figures">
 <h2 class="sr-only" id="figures-heading">Key figures</h2>
 <div class="figures-grid">
 ${entry.figures.map(figureTile).join('\n')}
 </div>
-</section>`);
+</section>
+</aside>`);
   }
+
+  parts.push('<div class="card-main">');
 
   for (const section of entry.sections) {
     parts.push(`<section class="section rise" style="--step:${step++}">
@@ -199,6 +221,7 @@ ${entry.figures.map(figureTile).join('\n')}
     )}</a></p>`);
   }
 
+  parts.push('</div>');
   parts.push('</article>');
 
   if (previous || next) {
