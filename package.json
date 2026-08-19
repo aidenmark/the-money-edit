@@ -13,7 +13,7 @@
     "preview": "SITE_BASE= node src/build.js && node scripts/serve.js",
     "preview:offline": "SITE_BASE= node src/build.js --offline && node scripts/serve.js",
     "check": "node src/check.js",
-    "test": "node --test test/"
+    "test": "node --test test/*.test.js"
   },
   "keywords": [
     "notion",
