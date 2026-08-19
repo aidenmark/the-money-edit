@@ -13,27 +13,34 @@
 name: Publish
 
 on:
-  # The entry is filed at 9:30am Eastern and the task publishes it directly,
-  # so this build is the only thing between an entry being written and being
-  # readable. The notification goes out at 9:30, which means anything later
-  # than a few minutes leaves a reader tapping through to yesterday's card.
+  # The target is a card that is already live when the opening bell rings at
+  # 9:30 Eastern, so the reader has it in hand at the open rather than waiting
+  # on a build. That means the task writes the entry around 9:00 and the site
+  # rebuilds in the half hour before the bell.
   #
-  # Cron in Actions is always UTC and does not follow daylight saving, so each
-  # Eastern time is two UTC times across the year. Both are listed, and one of
-  # each pair is a harmless no change rebuild depending on the season. Builds
-  # are free, a daylight saving bug that surfaces twice a year is not.
+  # Two morning passes, at 9:10 and 9:20 Eastern. The first is the real one and
+  # the second is insurance, because GitHub does not guarantee cron punctuality
+  # and delays of ten minutes or more happen under load. Even a badly delayed
+  # 9:10 run lands before the bell, and if it does not, 9:20 does.
   #
-  # 13:35 and 14:35 UTC are 9:35 Eastern. 13:50 and 14:50 are the retry, since
-  # GitHub does not guarantee cron punctuality and delays of ten minutes or
-  # more happen under load. 22:00 catches an entry edited later in the day.
+  # Cron in Actions is always UTC and ignores daylight saving, so each Eastern
+  # time is listed twice. One of each pair is a harmless no change rebuild
+  # depending on the season. Builds are free, a daylight saving bug that
+  # surfaces twice a year is not.
   #
-  # For a build that actually lands at 9:31 rather than 9:35 at best, see the
-  # repository_dispatch trigger below. Cron is the fallback, not the plan.
+  #   13:10 / 13:20 UTC  =  9:10 / 9:20 Eastern in summer
+  #   14:10 / 14:20 UTC  =  9:10 / 9:20 Eastern in winter
+  #
+  # 22:00 catches an entry edited later in the day.
+  #
+  # For a build that lands within a minute of the entry rather than waiting for
+  # a scheduler, see the repository_dispatch trigger below. Cron is the
+  # fallback, not the plan.
   schedule:
-    - cron: '35 13 * * 1-5'
-    - cron: '50 13 * * 1-5'
-    - cron: '35 14 * * 1-5'
-    - cron: '50 14 * * 1-5'
+    - cron: '10 13 * * 1-5'
+    - cron: '20 13 * * 1-5'
+    - cron: '10 14 * * 1-5'
+    - cron: '20 14 * * 1-5'
     - cron: '0 22 * * 1-5'
 
   # Publish on demand from outside GitHub. This is how the scheduled task can
