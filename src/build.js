@@ -19,7 +19,7 @@
 import { mkdir, rm, writeFile, copyFile, readFile } from 'node:fs/promises';
 import { deflateSync } from 'node:zlib';
 import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { requireNotionToken } from './config.js';
 import { fetchAllRows, fetchPageBlocks, normalizeRow } from './notion.js';
@@ -104,12 +104,38 @@ async function loadEntries() {
  * must not be in the future, resolved in New York, so an entry can be written
  * and approved ahead of time without appearing early.
  */
-function selectPublishable(entries, today) {
+export function selectPublishable(entries, today) {
   return entries.filter((entry) => {
     if (entry.status !== 'Published') return false;
     if (!entry.date) return false;
     return entry.date <= today;
   });
+}
+
+/**
+ * Order entries newest first, and break a same day tie by substance.
+ *
+ * The tiebreak is not cosmetic. Only the first entry on a date gets the clean
+ * /2026/08/14/ path that the morning notification can construct, and any
+ * other entry that day is pushed to a suffixed URL. Sorting on date alone
+ * left that choice to whatever order Notion happened to return, which meant a
+ * one line stub could take the canonical URL and push the real writeup to
+ * /2026/08/14/2/. The database already contains exactly that pair.
+ *
+ * Substance is measured by how much page body an entry has, then by the
+ * length of its summary. The id is the final tiebreak purely so the ordering
+ * is total and a rebuild can never produce different URLs from the same data.
+ */
+export function byDateThenSubstance(a, b) {
+  if (a.date !== b.date) return b.date.localeCompare(a.date);
+
+  const blocks = (b.blocks?.length ?? 0) - (a.blocks?.length ?? 0);
+  if (blocks !== 0) return blocks;
+
+  const summary = (b.summary?.length ?? 0) - (a.summary?.length ?? 0);
+  if (summary !== 0) return summary;
+
+  return String(a.id).localeCompare(String(b.id));
 }
 
 /**
@@ -119,7 +145,7 @@ function selectPublishable(entries, today) {
  * when two entries on the same day also share a headline, which has not
  * happened yet but costs three lines to make impossible.
  */
-function assignSlugs(entries) {
+export function assignSlugs(entries) {
   // How many entries already seen for a given date. The first entry of a day
   // gets the clean /2026/08/18/ path, which is the one the morning
   // notification can construct without knowing anything but the date. Any
@@ -143,7 +169,7 @@ function assignSlugs(entries) {
  * case insensitive because "Treasury yield" and "treasury yield" are the
  * same term written on different mornings.
  */
-function collectGlossary(entries) {
+export function collectGlossary(entries) {
   const byTerm = new Map();
 
   // Oldest first, so the first write for a term is the earliest one.
@@ -362,7 +388,7 @@ async function main() {
 
   const all = await loadEntries();
   const published = assignSlugs(
-    selectPublishable(all, today).sort((a, b) => b.date.localeCompare(a.date))
+    selectPublishable(all, today).sort(byDateThenSubstance)
   ).map(parseEntry);
 
   console.log(
@@ -434,7 +460,15 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  console.error(`\nBuild failed.\n${error.message}\n`);
-  process.exit(1);
-});
+// Run only when this file is executed directly. Guarding it means the policy
+// functions above can be imported by tests without kicking off a build, which
+// is what makes the publishing rules testable at all.
+const executedDirectly =
+  process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+
+if (executedDirectly) {
+  main().catch((error) => {
+    console.error(`\nBuild failed.\n${error.message}\n`);
+    process.exit(1);
+  });
+}
