@@ -65,7 +65,9 @@ on:
   #     https://api.github.com/repos/aidenmark/the-money-edit/dispatches \
   #     -d '{"event_type":"entry-published"}'
   #
-  # Until that is wired up the crons cover it, just less promptly.
+  # All four claude.ai tasks carry this. Measured cron lag on 2026-08-19 was
+  # 29 to 42 minutes, so without the dispatch the notification points at a
+  # page that has not rebuilt yet. See docs/scheduled-tasks.md.
   repository_dispatch:
     types: [entry-published]
 
