@@ -191,6 +191,34 @@ One operational note: GitHub disables scheduled workflows after 60 days without 
 
 ---
 
+## Citation
+
+Every entry summarises reporting done by someone else. Attribution is treated as
+part of the entry rather than as small print:
+
+- The `Source` section takes **multiple links** and the site renders all of them, as
+  their own card showing each title and its publisher.
+- The build prints a warning naming any published entry with no source. Entries
+  publish without human review, so the build is the only checkpoint.
+- Source article titles are reproduced **exactly as published**. The project's no em
+  dashes rule applies to its own writing, not to quoted headlines, because rewriting
+  another publication's title would be worse than the dash.
+
+Figures and facts are reported freely. Distinctive phrasing is not, and the writing
+should explain in its own words rather than track the wording of the article it
+summarises.
+
+## Credits
+
+Typefaces are loaded from Google Fonts and are openly licensed:
+
+- [Instrument Serif](https://fonts.google.com/specimen/Instrument+Serif), SIL Open Font License 1.1
+- [Inter](https://fonts.google.com/specimen/Inter), SIL Open Font License 1.1
+- [JetBrains Mono](https://fonts.google.com/specimen/JetBrains+Mono), SIL Open Font License 1.1
+
+No other third party code or assets are used. The project has no runtime
+dependencies.
+
 ## License
 
 MIT

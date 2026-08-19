@@ -460,11 +460,32 @@ async function main() {
   // library, which the project deliberately does not have.
   await writeBinary('assets/icon.png', touchIconPng());
 
+  // Attribution check. With no human review before publication, the build is
+  // the only checkpoint between the task writing an entry and the public
+  // reading it. An entry that summarises reporting without crediting it is
+  // the one failure worth shouting about, so it is reported by name.
+  //
+  // This warns rather than fails. A missing citation on one entry should not
+  // take the whole site offline, and a loud warning in the CI log is visible
+  // where it matters.
+  const uncited = published.filter((entry) => entry.sources.length === 0);
+  if (uncited.length > 0) {
+    console.warn('\nWARNING: published entries with no source credited:');
+    for (const entry of uncited) {
+      console.warn(`  ${entry.date}  ${entry.headline}`);
+    }
+    console.warn(
+      'Every entry summarises reporting by someone else and must credit it.\n'
+    );
+  }
+
   const withFigures = published.filter((entry) => entry.figures.length > 0).length;
   const withTerms = published.filter((entry) => entry.term).length;
+  const citations = published.reduce((total, entry) => total + entry.sources.length, 0);
   console.log(
     `Built ${published.length} entry pages in ${Date.now() - started}ms. ` +
-      `${withFigures} carry key figures, ${withTerms} define a term.`
+      `${withFigures} carry key figures, ${withTerms} define a term, ` +
+      `${citations} sources credited.`
   );
   if (published.length === 0) {
     console.log('Nothing is published yet, so the site built with its empty state.');

@@ -974,3 +974,49 @@ code {
   transition: color 0.25s ease;
 }
 .archive-more a:hover { color: var(--accent); }
+
+/* Sources. Attribution is a card of its own rather than small print, because
+   this writing summarises other people's reporting and an entry can draw on
+   more than one article. */
+.source-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.55rem;
+}
+
+.source-list a {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: rgba(0, 0, 0, 0.22);
+  text-decoration: none;
+  transition: border-color 0.3s ease, background 0.3s ease;
+}
+.source-list a:hover {
+  border-color: color-mix(in oklab, var(--accent) 40%, transparent);
+  background: rgba(0, 0, 0, 0.32);
+}
+
+.source-title {
+  color: var(--text-soft);
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+.source-list a:hover .source-title { color: var(--text); }
+
+/* The publisher, so credit is legible without reading the whole title. */
+.source-host {
+  font-family: var(--font-mono);
+  font-size: var(--size-micro);
+  letter-spacing: 0.12em;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+.source-list a:hover .source-host { color: var(--accent); }
