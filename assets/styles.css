@@ -408,7 +408,7 @@ code {
 }
 
 
-/* 7a. Opening bell ---------------------------------------------------------
+/* 7a. Closing bell ---------------------------------------------------------
    The loudest card, and the reason to open this at 9:30. It carries the
    accent, a live pulse, and the only genuinely large numerals on the page.
    -------------------------------------------------------------------------- */
@@ -448,6 +448,29 @@ code {
   0%   { transform: translateX(-140%) skewX(-18deg); }
   55%  { transform: translateX(360%) skewX(-18deg); }
   100% { transform: translateX(360%) skewX(-18deg); }
+}
+
+/* The datestamp. Sits above the card stack rather than inside any card, so
+   every entry carries a date whether or not it reports figures. The trailing
+   hairline is what makes it read as an instrument label rather than a byline. */
+.entry-stamp {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0 0 1.15rem;
+  padding: 0 0.35rem;
+  font-family: var(--font-mono);
+  font-size: var(--size-micro);
+  font-weight: 500;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.entry-stamp::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, var(--accent-soft), transparent);
 }
 
 .bell-strip {
@@ -958,4 +981,88 @@ code {
   .card-headline, .term-name, .hero-title { color: #111; }
   .section-body, .card-lede { color: #333; }
   .figures, .figure { background: #fff; border-color: #ccc; }
+}
+
+/* The link from the windowed front page to the complete archive. */
+.archive-more {
+  margin: 1.75rem 0 0;
+  font-family: var(--font-mono);
+  font-size: var(--size-micro);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+.archive-more a {
+  color: var(--text-mute);
+  text-decoration: none;
+  transition: color 0.25s ease;
+}
+.archive-more a:hover { color: var(--accent); }
+
+/* Sources. Attribution is a card of its own rather than small print, because
+   this writing summarises other people's reporting and an entry can draw on
+   more than one article. */
+.source-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.55rem;
+}
+
+.source-list a {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: rgba(0, 0, 0, 0.22);
+  text-decoration: none;
+  transition: border-color 0.3s ease, background 0.3s ease;
+}
+.source-list a:hover {
+  border-color: color-mix(in oklab, var(--accent) 40%, transparent);
+  background: rgba(0, 0, 0, 0.32);
+}
+
+.source-title {
+  color: var(--text-soft);
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+.source-list a:hover .source-title { color: var(--text); }
+
+/* The publisher, so credit is legible without reading the whole title. */
+.source-host {
+  font-family: var(--font-mono);
+  font-size: var(--size-micro);
+  letter-spacing: 0.12em;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+.source-list a:hover .source-host { color: var(--accent); }
+
+/* Which edition this is, shown beside the date. The brief runs twice a day,
+   so a reader arriving from a notification needs to know which one they
+   opened without inferring it from the content. */
+.entry-edition {
+  padding: 0.2rem 0.55rem;
+  border: 1px solid color-mix(in oklab, var(--accent) 35%, transparent);
+  border-radius: 999px;
+  background: var(--accent-soft);
+  font-size: 0.6rem;
+  letter-spacing: 0.18em;
+  white-space: nowrap;
+}
+
+/* The same distinction in the archive list, kept quiet so the headline stays
+   the thing being scanned. */
+.archive-edition {
+  display: block;
+  margin-top: 0.3rem;
+  color: var(--text-faint);
+  font-size: 0.6rem;
+  letter-spacing: 0.12em;
 }

@@ -20,7 +20,14 @@ import {
   entryPath,
   splitFigure,
   shortenLabel,
+  renderLatestRedirect,
+  renderManifest,
+  renderFullArchive,
+  hostOf,
+  renderDayRedirect,
+  dayPath,
 } from '../src/render.js';
+import { normalizeDashes, EDITIONS } from '../src/util.js';
 
 /** Match how the renderer escapes text, so assertions compare like with like. */
 const escapeForTest = (text) => String(text).replace(/&/g, '&amp;');
@@ -164,11 +171,89 @@ test('the accent is stable for a date and differs between dates', () => {
   assert.match(accentFor('2026-08-18').className, /^accent-[0-7]$/);
 });
 
-test('entry paths are date first so they sort chronologically', () => {
+test('entry paths carry the date and the edition', () => {
+  // The push notification has to construct this knowing only the date and
+  // which edition just went out. A slug would need the headline.
   assert.equal(
-    entryPath({ date: '2026-08-18', slug: 'bond-yields' }),
-    '/entries/2026-08-18-bond-yields/'
+    entryPath({ date: '2026-08-18', edition: EDITIONS.closing, dateIndex: 0 }),
+    '/2026/08/18/closing/'
   );
+  assert.equal(
+    entryPath({ date: '2026-08-18', edition: EDITIONS.opening, dateIndex: 0 }),
+    '/2026/08/18/opening/'
+  );
+});
+
+test('the two editions of one day never collide', () => {
+  const morning = { date: '2026-08-18', edition: EDITIONS.opening, dateIndex: 0 };
+  const evening = { date: '2026-08-18', edition: EDITIONS.closing, dateIndex: 0 };
+  assert.notEqual(entryPath(morning), entryPath(evening));
+});
+
+test('a duplicate in the same slot is suffixed rather than overwriting', () => {
+  assert.equal(
+    entryPath({ date: '2026-08-18', edition: EDITIONS.closing, dateIndex: 1 }),
+    '/2026/08/18/closing/2/'
+  );
+});
+
+test('the bare date path resolves to that day', () => {
+  assert.equal(dayPath('2026-08-18'), '/2026/08/18/');
+});
+
+test('the day redirect lands on that day most recent edition', () => {
+  const html = renderDayRedirect({
+    date: '2026-08-18',
+    edition: EDITIONS.closing,
+    dateIndex: 0,
+    headline: 'Bond yields hit a 2007 high',
+  });
+  assert.match(html, /url=[^"]*\/2026\/08\/18\/closing\//);
+  assert.match(html, /name="robots" content="noindex"/);
+});
+
+test('the latest redirect points at the newest entry and is not indexed', () => {
+  const html = renderLatestRedirect({
+    date: '2026-08-18',
+    edition: EDITIONS.closing,
+    dateIndex: 0,
+    headline: 'Bond yields hit a 2007 high',
+  });
+
+  assert.match(html, /http-equiv="refresh" content="0; url=[^"]*\/2026\/08\/18\/closing\//);
+  assert.match(html, /name="robots" content="noindex"/);
+  assert.match(html, /<a href="[^"]*\/2026\/08\/18\/closing\/">/);
+});
+
+test('the card names its edition, in the stamp and on the figures card', () => {
+  // Two briefs a day means a reader arriving from a notification has to know
+  // which one they opened without inferring it from the content.
+  const morning = parseEntry({
+    ...fixtures.entries.find((e) => e.edition === 'Opening Bell'),
+    edition: EDITIONS.opening,
+  });
+  const html = renderCard(morning);
+
+  assert.match(html, /class="entry-edition">Opening bell</);
+  assert.match(html, /id="bell-heading">Opening bell</);
+  assert.ok(!html.includes('Closing bell'));
+});
+
+test('the manifest opens on the latest entry in standalone mode', () => {
+  const manifest = JSON.parse(renderManifest());
+
+  assert.match(manifest.start_url, /\/latest\/$/);
+  assert.equal(manifest.display, 'standalone');
+  assert.equal(manifest.theme_color, '#06070A');
+  // Every icon the manifest names has to be a file the build actually writes.
+  // The first version referenced assets/icon.svg, which was never generated.
+  const written = new Set(['favicon.svg', 'icon.png']);
+  for (const icon of manifest.icons) {
+    assert.ok(
+      written.has(icon.src.split('/').pop()),
+      `manifest references ${icon.src}, which the build does not write`
+    );
+  }
 });
 
 test('the summary is not printed on the card when the body already contains it', () => {
@@ -188,4 +273,146 @@ test('the summary is not printed on the card when the body already contains it',
     head.includes('og:description'),
     'the summary should still be carried in the page metadata'
   );
+});
+
+test('a source article title is reproduced exactly as published', () => {
+  // The house style rule covers writing this project produces. It does not
+  // cover quoted headlines from other publications, which are reproduced
+  // verbatim. Rewriting someone else's title to match our style would be a
+  // worse problem than the dash.
+  const withSource = parseEntry({
+    ...fixtures.entries[0],
+    slug: 's',
+    blocks: [
+      {
+        type: 'paragraph',
+        paragraph: {
+          rich_text: [
+            {
+              plain_text: 'Source: Yahoo Finance \u2014 Stock Market Today, Aug. 14',
+              href: 'https://example.com/a',
+            },
+          ],
+        },
+      },
+    ],
+  });
+
+  const html = renderCard(withSource);
+  assert.match(html, /Yahoo Finance \u2014 Stock Market Today/);
+});
+
+test('a dash in our own writing is still normalised as a safety net', () => {
+  // The task is instructed not to use them, so this should rarely fire, but
+  // the headline and the prose are ours and the rule applies to them.
+  const ours = parseEntry({
+    id: 'x',
+    headline: 'Yields climb \u2014 tech slides',
+    summary: 'Rates rose \u2014 stocks fell.',
+    date: '2026-08-20',
+    status: 'Published',
+    slug: 'x',
+    blocks: [],
+  });
+
+  const html = renderCard(ours);
+  assert.match(html, /Yields climb, tech slides/);
+  assert.ok(!/climb \u2014 tech/.test(html));
+});
+
+test('a dash joining a range becomes a hyphen, not a comma', () => {
+  // A year range needs a hyphen. A comma there would be wrong.
+  assert.equal(normalizeDashes('the 1990–2000 boom'), 'the 1990-2000 boom');
+  assert.equal(normalizeDashes('Yahoo — Markets'), 'Yahoo, Markets');
+});
+
+test('the front page links to the complete archive only when entries overflow', () => {
+  // Without the link, an entry older than the window would be reachable only
+  // through the previous and next chain.
+  assert.ok(!renderArchive(entries, { olderCount: 0 }).includes('archive-more'));
+
+  const withOlder = renderArchive(entries, { olderCount: 12 });
+  assert.match(withOlder, /class="archive-more/);
+  assert.match(withOlder, new RegExp(`See all ${entries.length + 12} entries`));
+});
+
+test('the complete archive groups every entry by month', () => {
+  const html = renderFullArchive(entries);
+
+  assert.match(html, /August 2026/);
+  for (const entry of entries) {
+    assert.ok(html.includes(escapeForTest(entry.headline)), `missing ${entry.headline}`);
+  }
+});
+
+test('attribution renders as its own card, with the publisher shown', () => {
+  const html = renderCard(withFigures);
+
+  assert.match(html, /class="source-list"/);
+  assert.match(html, /class="source-host">finance\.yahoo\.com</);
+  // The title is reproduced exactly as published, dashes and all.
+  assert.match(html, /Nvidia, AMD, Broadcom, Meta Slide as Bond Yields Surge/);
+});
+
+test('hostOf strips www and survives a malformed url', () => {
+  assert.equal(hostOf('https://www.stl.news/some/path'), 'stl.news');
+  assert.equal(hostOf('not a url'), '');
+});
+
+test('every entry carries its date, with or without figures', () => {
+  // The datestamp used to live inside the closing bell card, so an entry with
+  // no key figures rendered with no date anywhere. That will happen as soon as
+  // the content broadens past markets.
+  const bare = parseEntry({
+    id: 'bare',
+    headline: 'Mercedes reveals the electric G-Class',
+    summary: 'No market figures in this one.',
+    date: '2026-08-20',
+    status: 'Published',
+    blocks: [],
+  });
+
+  for (const [label, html] of [
+    ['with figures', renderCard(withFigures)],
+    ['without figures', renderCard(bare)],
+  ]) {
+    assert.match(html, /class="entry-stamp/, `${label}: no datestamp`);
+    assert.match(html, /<time datetime="\d{4}-\d{2}-\d{2}">/, `${label}: no machine readable date`);
+  }
+
+  // The bell card itself is still conditional. It is the numbers, and an
+  // entry with no numbers should not render an empty one.
+  assert.ok(!renderCard(bare).includes('widget--bell'));
+});
+
+test('a futures label is shortened without losing which contract it is', () => {
+  // "S&P 500 futures" was truncating to "S&P 500 FUTUR..." in a tile.
+  assert.equal(shortenLabel('S&P 500 futures'), 'S&P futures');
+  assert.equal(shortenLabel('Nasdaq 100 futures'), 'Nasdaq futures');
+  // Nothing to shorten here, so it is left alone.
+  assert.equal(shortenLabel('Brent crude'), 'Brent crude');
+});
+
+test('each edition promotes its own payoff section', () => {
+  // The evening edition highlights what the day means for your money. The
+  // morning edition has no such section, so what to watch is its equivalent
+  // and should get the same treatment rather than reading as a plain heading.
+  const morning = parseEntry({
+    id: 'am',
+    headline: 'Futures point higher',
+    summary: 'Overnight moves.',
+    date: '2026-08-18',
+    edition: EDITIONS.opening,
+    blocks: [
+      { type: 'heading_2', heading_2: { rich_text: [{ plain_text: 'Overnight' }] } },
+      { type: 'paragraph', paragraph: { rich_text: [{ plain_text: 'Asia closed higher.' }] } },
+      { type: 'heading_2', heading_2: { rich_text: [{ plain_text: 'What to watch' }] } },
+      { type: 'paragraph', paragraph: { rich_text: [{ plain_text: 'Retail earnings.' }] } },
+    ],
+  });
+
+  const html = renderCard(morning);
+  assert.match(html, /class="section section--payoff"/);
+  // And the ordinary section beside it is not promoted.
+  assert.match(html, /class="section">\s*<h2 class="section-label">Overnight/);
 });

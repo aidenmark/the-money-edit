@@ -13,16 +13,53 @@
 name: Publish
 
 on:
-  # Twice on weekdays. The entry is filed at 9:30am Eastern, so the first run
-  # picks up anything approved that morning and the second catches an
-  # afternoon approval the same day.
+  # The brief runs twice a weekday, so the site rebuilds twice.
   #
-  # Cron here is always UTC and does not follow daylight saving, so 15:00 UTC
-  # lands at 11:00 Eastern in summer and 10:00 in winter. Both are after the
-  # entry is filed, which is what matters.
+  #   Opening bell   task writes ~9:00am Eastern, builds at 9:10 and 9:20
+  #   Closing bell   task writes ~5:15pm Eastern, builds at 5:30 and 5:45
+  #
+  # Each pair is a real run plus a retry, because GitHub does not guarantee
+  # cron punctuality and delays of ten minutes or more happen under load. The
+  # morning pair still lands before the 9:30 opening bell even when delayed.
+  #
+  # Cron in Actions is always UTC and ignores daylight saving, so every Eastern
+  # time is listed twice. One of each pair is a harmless no change rebuild
+  # depending on the season, which costs nothing and removes a whole class of
+  # twice yearly bug:
+  #
+  #   13:10 / 13:20 UTC  =  9:10 / 9:20am Eastern in summer
+  #   14:10 / 14:20 UTC  =  9:10 / 9:20am Eastern in winter
+  #   21:30 / 21:45 UTC  =  5:30 / 5:45pm Eastern in summer
+  #   22:30 / 22:45 UTC  =  5:30 / 5:45pm Eastern in winter
+  #
+  # For a build that lands within a minute of the entry rather than waiting for
+  # a scheduler, see repository_dispatch below. Cron is the fallback.
   schedule:
-    - cron: '0 15 * * 1-5'
-    - cron: '0 21 * * 1-5'
+    - cron: '10 13 * * 1-5'
+    - cron: '20 13 * * 1-5'
+    - cron: '10 14 * * 1-5'
+    - cron: '20 14 * * 1-5'
+    - cron: '30 21 * * 1-5'
+    - cron: '45 21 * * 1-5'
+    - cron: '30 22 * * 1-5'
+    - cron: '45 22 * * 1-5'
+
+  # Publish on demand from outside GitHub. This is how the scheduled task can
+  # rebuild the site the moment it finishes writing an entry, instead of the
+  # site waiting for the next cron.
+  #
+  # The task fires it with a fine grained token holding only Contents write on
+  # this repository:
+  #
+  #   curl -X POST \
+  #     -H "Authorization: Bearer $TOKEN" \
+  #     -H "Accept: application/vnd.github+json" \
+  #     https://api.github.com/repos/aidenmark/the-money-edit/dispatches \
+  #     -d '{"event_type":"entry-published"}'
+  #
+  # Until that is wired up the crons cover it, just less promptly.
+  repository_dispatch:
+    types: [entry-published]
 
   # Republish whenever the site code itself changes.
   push:

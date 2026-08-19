@@ -17,14 +17,29 @@
  */
 
 import { mkdir, rm, writeFile, copyFile, readFile } from 'node:fs/promises';
+import { deflateSync } from 'node:zlib';
 import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { requireNotionToken } from './config.js';
 import { fetchAllRows, fetchPageBlocks, normalizeRow } from './notion.js';
 import { parseEntry } from './parse.js';
-import { renderCard, renderArchive, renderGlossary, entryPath, url, ORIGIN, SITE_NAME, SITE_TAGLINE } from './render.js';
-import { todayInNewYork, daysBetween, slugify, escapeHtml } from './util.js';
+import {
+  renderCard,
+  renderArchive,
+  renderGlossary,
+  renderFullArchive,
+  renderLatestRedirect,
+  renderDayRedirect,
+  dayPath,
+  renderManifest,
+  entryPath,
+  url,
+  ORIGIN,
+  SITE_NAME,
+  SITE_TAGLINE,
+} from './render.js';
+import { todayInNewYork, daysBetween, slugify, escapeHtml, resolveEdition } from './util.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -92,12 +107,43 @@ async function loadEntries() {
  * must not be in the future, resolved in New York, so an entry can be written
  * and approved ahead of time without appearing early.
  */
-function selectPublishable(entries, today) {
+export function selectPublishable(entries, today) {
   return entries.filter((entry) => {
     if (entry.status !== 'Published') return false;
     if (!entry.date) return false;
     return entry.date <= today;
   });
+}
+
+/**
+ * Order entries newest first.
+ *
+ * Two entries a day means date alone is not enough. Within a day the evening
+ * edition sorts ahead of the morning one, so "newest first" stays true in the
+ * archive, in the previous and next chain, and in what /latest/ points at.
+ *
+ * A same date and same edition collision should never happen, but if it does
+ * the fuller entry takes the clean URL rather than whichever Notion returned
+ * first. The id is the final tiebreak purely so the ordering is total and a
+ * rebuild can never produce different URLs from the same data.
+ */
+export function byDateThenEdition(a, b) {
+  if (a.date !== b.date) return b.date.localeCompare(a.date);
+
+  // Within a day, the evening edition is the more recent one and sorts first.
+  const aEvening = a.edition?.key === 'closing' ? 0 : 1;
+  const bEvening = b.edition?.key === 'closing' ? 0 : 1;
+  if (aEvening !== bEvening) return aEvening - bEvening;
+
+  // Same date and same edition should not happen. If it does, the entry with
+  // more to it wins the clean URL rather than whichever Notion returned first.
+  const blocks = (b.blocks?.length ?? 0) - (a.blocks?.length ?? 0);
+  if (blocks !== 0) return blocks;
+
+  const summary = (b.summary?.length ?? 0) - (a.summary?.length ?? 0);
+  if (summary !== 0) return summary;
+
+  return String(a.id).localeCompare(String(b.id));
 }
 
 /**
@@ -107,17 +153,19 @@ function selectPublishable(entries, today) {
  * when two entries on the same day also share a headline, which has not
  * happened yet but costs three lines to make impossible.
  */
-function assignSlugs(entries) {
-  const taken = new Set();
+export function assignSlugs(entries) {
+  // How many entries already seen for a given date and edition. Each slot
+  // takes the clean /2026/08/18/closing/ path, which is constructible from the
+  // date and the edition without knowing the headline. A duplicate in the same
+  // slot is suffixed rather than silently overwriting the page.
+  const perSlot = new Map();
+
   for (const entry of entries) {
-    const base = slugify(entry.headline) || 'entry';
-    let slug = base;
-    let counter = 2;
-    while (taken.has(`${entry.date}-${slug}`)) {
-      slug = `${base}-${counter++}`;
-    }
-    taken.add(`${entry.date}-${slug}`);
-    entry.slug = slug;
+    const slot = `${entry.date}/${entry.edition?.key ?? 'closing'}`;
+    const seen = perSlot.get(slot) ?? 0;
+    entry.dateIndex = seen;
+    perSlot.set(slot, seen + 1);
+    entry.slug = slugify(entry.headline) || 'entry';
   }
   return entries;
 }
@@ -130,7 +178,7 @@ function assignSlugs(entries) {
  * case insensitive because "Treasury yield" and "treasury yield" are the
  * same term written on different mornings.
  */
-function collectGlossary(entries) {
+export function collectGlossary(entries) {
   const byTerm = new Map();
 
   // Oldest first, so the first write for a term is the earliest one.
@@ -149,6 +197,92 @@ function collectGlossary(entries) {
 /* -------------------------------------------------------------------------
    Extra files
    ------------------------------------------------------------------------- */
+
+/**
+ * A 180 by 180 home screen icon, encoded as a PNG by hand.
+ *
+ * iOS ignores SVG for apple-touch-icon, so a raster file is required, and
+ * this project has no image library and is not going to gain one for a single
+ * 180 pixel square. A PNG is a signature followed by three chunks, and the
+ * pixel data is just deflated scanlines, both of which node:zlib already
+ * provides. The whole thing is about forty lines.
+ *
+ * The mark matches the favicon and the wordmark: two offset squares.
+ */
+function touchIconPng() {
+  const size = 180;
+  const background = [0x06, 0x07, 0x0a];
+  const squares = [
+    { x: 39, y: 39, side: 46, rgb: [0xe8, 0xc8, 0x8a] }, // champagne
+    { x: 95, y: 95, side: 46, rgb: [0x8f, 0xc7, 0xe8] }, // ice
+  ];
+
+  // Raw scanlines. Each row is prefixed with a zero byte, the PNG filter type
+  // meaning "no filtering", which keeps the encoder trivial.
+  const raw = Buffer.alloc(size * (size * 3 + 1));
+  let offset = 0;
+  for (let y = 0; y < size; y += 1) {
+    raw[offset++] = 0;
+    for (let x = 0; x < size; x += 1) {
+      const hit = squares.find(
+        (s) => x >= s.x && x < s.x + s.side && y >= s.y && y < s.y + s.side
+      );
+      const [r, g, b] = hit ? hit.rgb : background;
+      raw[offset++] = r;
+      raw[offset++] = g;
+      raw[offset++] = b;
+    }
+  }
+
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(size, 0);
+  ihdr.writeUInt32BE(size, 4);
+  ihdr[8] = 8;  // bit depth
+  ihdr[9] = 2;  // colour type 2, truecolour RGB
+  // bytes 10 to 12 stay zero: deflate compression, adaptive filtering, no interlace
+
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    pngChunk('IHDR', ihdr),
+    pngChunk('IDAT', deflateSync(raw, { level: 9 })),
+    pngChunk('IEND', Buffer.alloc(0)),
+  ]);
+}
+
+/** Length, type, payload, CRC. The CRC covers the type and the payload. */
+function pngChunk(type, payload) {
+  const header = Buffer.alloc(4);
+  header.writeUInt32BE(payload.length, 0);
+  const body = Buffer.concat([Buffer.from(type, 'ascii'), payload]);
+  const crc = Buffer.alloc(4);
+  crc.writeUInt32BE(crc32(body), 0);
+  return Buffer.concat([header, body, crc]);
+}
+
+/**
+ * CRC-32 as PNG specifies it. node:zlib gained a crc32 export after Node 18,
+ * and the engines field allows Node 18, so it is implemented here rather than
+ * silently requiring a newer runtime.
+ */
+const CRC_TABLE = (() => {
+  const table = new Int32Array(256);
+  for (let n = 0; n < 256; n += 1) {
+    let c = n;
+    for (let k = 0; k < 8; k += 1) {
+      c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    }
+    table[n] = c;
+  }
+  return table;
+})();
+
+function crc32(buffer) {
+  let crc = -1;
+  for (let i = 0; i < buffer.length; i += 1) {
+    crc = CRC_TABLE[(crc ^ buffer[i]) & 0xff] ^ (crc >>> 8);
+  }
+  return (crc ^ -1) >>> 0;
+}
 
 /** A mark rather than a letterform. The square is the same one the wordmark
  *  uses, which keeps the tab consistent with the page. */
@@ -246,6 +380,13 @@ async function write(relativePath, contents) {
   await writeFile(target, contents, 'utf8');
 }
 
+/** Same as write, but for a Buffer, so no encoding is applied. */
+async function writeBinary(relativePath, buffer) {
+  const target = join(OUT, relativePath);
+  await mkdir(dirname(target), { recursive: true });
+  await writeFile(target, buffer);
+}
+
 /* -------------------------------------------------------------------------
    Main
    ------------------------------------------------------------------------- */
@@ -256,7 +397,9 @@ async function main() {
 
   const all = await loadEntries();
   const published = assignSlugs(
-    selectPublishable(all, today).sort((a, b) => b.date.localeCompare(a.date))
+    selectPublishable(all, today)
+      .map((entry) => ({ ...entry, edition: resolveEdition(entry) }))
+      .sort(byDateThenEdition)
   ).map(parseEntry);
 
   console.log(
@@ -282,17 +425,46 @@ async function main() {
     (entry) => daysBetween(entry.date, today) <= ARCHIVE_WINDOW_DAYS
   );
 
-  await write('index.html', renderArchive(recent, { windowDays: ARCHIVE_WINDOW_DAYS }));
+  const older = published.length - recent.length;
+  await write(
+    'index.html',
+    renderArchive(recent, { windowDays: ARCHIVE_WINDOW_DAYS, olderCount: older })
+  );
+
+  // Built unconditionally rather than only when the window overflows, so the
+  // address is stable and never 404s once someone has linked to it.
+  if (published.length > 0) {
+    await write('archive/index.html', renderFullArchive(published));
+  }
   await write(
     'glossary/index.html',
     renderGlossary(collectGlossary(published), { latestDate: published[0]?.date ?? null })
   );
 
+  // The address the morning push notification points at. Written even when
+  // nothing is published, so the link never 404s.
+  if (published.length > 0) {
+    await write('latest/index.html', renderLatestRedirect(published[0]));
+  }
+
+  // A redirect at each bare date, landing on that day's most recent edition,
+  // so a trimmed URL still resolves. Entries are newest first, so the first
+  // one seen for a date is the one to point at.
+  const daysWritten = new Set();
+  for (const entry of published) {
+    if (daysWritten.has(entry.date)) continue;
+    daysWritten.add(entry.date);
+    await write(`${dayPath(entry.date).replace(/^\//, '')}index.html`, renderDayRedirect(entry));
+  }
+
+  await write('manifest.webmanifest', renderManifest());
   await write('404.html', render404());
   await write('feed.xml', renderFeed(published));
   await write(
     'sitemap.xml',
-    renderSitemap(['/', '/glossary/', ...published.map(entryPath)])
+    // /latest/ is deliberately excluded. It is a redirect, and indexing it
+    // would compete with the entry it points at.
+    renderSitemap(['/', '/archive/', '/glossary/', ...published.map(entryPath)])
   );
   await write('robots.txt', `User-agent: *\nAllow: /\nSitemap: ${ORIGIN}${url('sitemap.xml')}\n`);
 
@@ -303,19 +475,52 @@ async function main() {
   await mkdir(join(OUT, 'assets'), { recursive: true });
   await copyFile(join(ROOT, 'assets/styles.css'), join(OUT, 'assets/styles.css'));
   await write('assets/favicon.svg', faviconSvg());
+  // iOS ignores SVG for the home screen icon, so a PNG is required. This is a
+  // tiny hand assembled file rather than a build dependency on an image
+  // library, which the project deliberately does not have.
+  await writeBinary('assets/icon.png', touchIconPng());
+
+  // Attribution check. With no human review before publication, the build is
+  // the only checkpoint between the task writing an entry and the public
+  // reading it. An entry that summarises reporting without crediting it is
+  // the one failure worth shouting about, so it is reported by name.
+  //
+  // This warns rather than fails. A missing citation on one entry should not
+  // take the whole site offline, and a loud warning in the CI log is visible
+  // where it matters.
+  const uncited = published.filter((entry) => entry.sources.length === 0);
+  if (uncited.length > 0) {
+    console.warn('\nWARNING: published entries with no source credited:');
+    for (const entry of uncited) {
+      console.warn(`  ${entry.date}  ${entry.headline}`);
+    }
+    console.warn(
+      'Every entry summarises reporting by someone else and must credit it.\n'
+    );
+  }
 
   const withFigures = published.filter((entry) => entry.figures.length > 0).length;
   const withTerms = published.filter((entry) => entry.term).length;
+  const citations = published.reduce((total, entry) => total + entry.sources.length, 0);
   console.log(
     `Built ${published.length} entry pages in ${Date.now() - started}ms. ` +
-      `${withFigures} carry key figures, ${withTerms} define a term.`
+      `${withFigures} carry key figures, ${withTerms} define a term, ` +
+      `${citations} sources credited.`
   );
   if (published.length === 0) {
     console.log('Nothing is published yet, so the site built with its empty state.');
   }
 }
 
-main().catch((error) => {
-  console.error(`\nBuild failed.\n${error.message}\n`);
-  process.exit(1);
-});
+// Run only when this file is executed directly. Guarding it means the policy
+// functions above can be imported by tests without kicking off a build, which
+// is what makes the publishing rules testable at all.
+const executedDirectly =
+  process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+
+if (executedDirectly) {
+  main().catch((error) => {
+    console.error(`\nBuild failed.\n${error.message}\n`);
+    process.exit(1);
+  });
+}

@@ -98,6 +98,17 @@ The separation that matters most is `notion.js`. Everything downstream works wit
 
 ---
 
+## The scheduled tasks
+
+Two recurring tasks in claude.ai write the entries, one per edition. Their
+prompts live in [`docs/scheduled-tasks.md`](docs/scheduled-tasks.md), which is
+the thing to edit when you want to change what gets written.
+
+| Task | Runs | Writes |
+|---|---|---|
+| Opening Bell | Weekdays 9:00am Eastern | A short pre-market scan |
+| Closing Bell | Weekdays 5:15pm Eastern | The full recap of the session |
+
 ## The entry format
 
 The parser accepts three shapes, because the scheduled task's output changed over time and older entries still have to render. Going forward, write this one.
@@ -142,7 +153,7 @@ The stack is always the same three beats: the numbers, the story, the word you l
 - **One accent per day**, chosen by hashing the entry date against eight curated tones. A hash mapped onto the full hue wheel eventually lands on a color that looks wrong against this background, and there is nobody reviewing the site at 9:30am to catch it. A fixed set guarantees every day looks deliberate.
 - **Hash the date, not the headline**, so an entry keeps its tone even if the headline is edited in Notion afterward.
 - **No randomness anywhere.** `Math.random` appears nowhere in the project. A card rebuilt in December has to look identical to how it looked in August.
-- **Numbers get the weight.** The opening bell card leads, because the numbers are what someone opens this for at 9:30am. The first three figures become large tiles, and the rest drop to a quiet list so nothing reported is ever dropped.
+- **Numbers get the weight.** The closing bell card leads, because the numbers are what someone opens this for at 9:30am. The first three figures become large tiles, and the rest drop to a quiet list so nothing reported is ever dropped.
 - **Depth in three layers.** A gradient face, a one pixel inset highlight along the top edge to catch the light, and a wide low shadow underneath to lift the card off the page.
 - **What it means for you is promoted** out of the run of prose. It is the reason the project exists, so it does not render as merely the third heading of three.
 - **The page assembles itself** on load. Each block carries a `--step` index and the stylesheet derives the delay from it, so adding a section never means touching the CSS.
@@ -190,6 +201,34 @@ One operational note: GitHub disables scheduled workflows after 60 days without 
 `SITE_BASE` and `SITE_ORIGIN` in `src/render.js` are the only two places a URL is encoded. Moving from the current project page to a custom domain is those two values, a `CNAME` file, and a DNS record. No search and replace through the templates.
 
 ---
+
+## Citation
+
+Every entry summarises reporting done by someone else. Attribution is treated as
+part of the entry rather than as small print:
+
+- The `Source` section takes **multiple links** and the site renders all of them, as
+  their own card showing each title and its publisher.
+- The build prints a warning naming any published entry with no source. Entries
+  publish without human review, so the build is the only checkpoint.
+- Source article titles are reproduced **exactly as published**. The project's no em
+  dashes rule applies to its own writing, not to quoted headlines, because rewriting
+  another publication's title would be worse than the dash.
+
+Figures and facts are reported freely. Distinctive phrasing is not, and the writing
+should explain in its own words rather than track the wording of the article it
+summarises.
+
+## Credits
+
+Typefaces are loaded from Google Fonts and are openly licensed:
+
+- [Instrument Serif](https://fonts.google.com/specimen/Instrument+Serif), SIL Open Font License 1.1
+- [Inter](https://fonts.google.com/specimen/Inter), SIL Open Font License 1.1
+- [JetBrains Mono](https://fonts.google.com/specimen/JetBrains+Mono), SIL Open Font License 1.1
+
+No other third party code or assets are used. The project has no runtime
+dependencies.
 
 ## License
 

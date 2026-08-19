@@ -97,6 +97,103 @@ export function escapeHtml(value) {
 }
 
 /**
+ * The two daily editions.
+ *
+ * The brief runs twice on a weekday. The morning edition is a scan, covering
+ * where yesterday closed, what moved overnight, and what to watch. The evening
+ * edition is the read, recapping the session that just finished. They are
+ * deliberately different lengths, because two full length briefs a day is how
+ * a reader ends up skipping both.
+ *
+ * `name` matches the Notion select option exactly. `key` is the URL segment.
+ */
+export const EDITIONS = {
+  opening: {
+    key: 'opening',
+    name: 'Opening Bell',
+    label: 'Opening bell',
+    note: 'Before the bell',
+  },
+  closing: {
+    key: 'closing',
+    name: 'Closing Bell',
+    label: 'Closing bell',
+    note: 'After the close',
+  },
+};
+
+/** The hour of day in New York for an ISO timestamp, or null if unparseable. */
+export function hourInNewYork(isoTimestamp) {
+  if (!isoTimestamp) return null;
+  const when = new Date(isoTimestamp);
+  if (Number.isNaN(when.getTime())) return null;
+  return Number(
+    new Intl.DateTimeFormat('en-US', {
+      timeZone: TIMEZONE,
+      hour: '2-digit',
+      hour12: false,
+    }).format(when)
+  );
+}
+
+/**
+ * Work out which edition an entry belongs to.
+ *
+ * The Notion Edition property is authoritative when set. When it is not, the
+ * creation time decides, because entries written before the schema gained the
+ * property have no other signal and should still land somewhere sensible
+ * rather than breaking the build. Noon in New York is the split, which is
+ * comfortably clear of both the 9:00am and the 5:15pm filing times.
+ */
+export function resolveEdition(entry) {
+  const declared = String(entry.edition ?? '').trim().toLowerCase();
+  if (declared) {
+    const match = Object.values(EDITIONS).find(
+      (edition) => edition.name.toLowerCase() === declared
+    );
+    if (match) return match;
+  }
+
+  const hour = hourInNewYork(entry.createdAt ?? entry.lastEdited);
+  return hour !== null && hour < 12 ? EDITIONS.opening : EDITIONS.closing;
+}
+
+/**
+ * Normalise dashes out of text this project wrote.
+ *
+ * The house style rule is no em dashes, and no sentences broken up with
+ * dashes. The scheduled task is instructed to follow it, so this is a safety
+ * net rather than the primary mechanism, catching the case where one slips
+ * through into a headline or a paragraph.
+ *
+ * A spaced dash is acting as a sentence break, so it becomes a comma, which
+ * is what the rule asks for. An unspaced one is joining a year range, where a
+ * plain hyphen is correct and a comma would be wrong.
+ *
+ * Deliberately NOT applied to source article titles. Those are written by
+ * other publications and are quoted, so they are reproduced exactly as
+ * published. Silently rewriting someone else's headline to match our style
+ * would be a worse problem than the dash. Also never applied to URLs, where
+ * rewriting a character would break the link.
+ */
+export function normalizeDashes(text) {
+  return String(text ?? '')
+    .replace(/\s+[—–]\s+/g, ', ')
+    .replace(/[—–]/g, '-');
+}
+
+/**
+ * Escape a piece of human readable text for HTML, applying the house style
+ * rule on the way through.
+ *
+ * Everything a reader sees should go through this. Use escapeHtml directly
+ * only for URLs and attribute values.
+ */
+export function escapeText(value) {
+  return escapeHtml(normalizeDashes(value));
+}
+
+/**
  * Build a URL safe slug from a headline.
  *
  * Diacritics are stripped rather than dropped so that a headline containing

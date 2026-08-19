@@ -16,7 +16,7 @@
  * entries render richer, and nothing needs backfilling by hand.
  */
 
-import { escapeHtml, slugify } from './util.js';
+import { escapeHtml, escapeText, slugify } from './util.js';
 import { plainText, firstLink } from './notion.js';
 
 /** Section headings the card renders in a fixed order, whatever Notion says. */
@@ -185,7 +185,7 @@ export function richTextToHtml(richText = []) {
   return richText
     .map((piece) => {
       const annotations = piece?.annotations ?? {};
-      let html = escapeHtml(piece?.plain_text ?? '');
+      let html = escapeText(piece?.plain_text ?? '');
       if (!html) return '';
       if (annotations.code) html = `<code>${html}</code>`;
       if (annotations.bold) html = `<strong>${html}</strong>`;
@@ -220,7 +220,7 @@ export function parseEntry(entry) {
   const prose = new Map();
   const figures = [];
   let term = null;
-  let source = null;
+  const sources = [];
   let sawHeading = false;
   let current = 'what-happened';
 
@@ -267,10 +267,10 @@ export function parseEntry(entry) {
     // paragraph that names itself as the source inline.
     const href = firstLink(richText);
     if (href && (current === 'source' || /^\s*\(?source\b/i.test(text))) {
-      source = {
+      addSource(sources, {
         url: href,
         title: text.replace(/^\s*\(?source\s*[:\-–]?\s*/i, '').replace(/\)$/, '').trim(),
-      };
+      });
       continue;
     }
 
@@ -288,7 +288,7 @@ export function parseEntry(entry) {
     }
 
     if (current === 'source') {
-      if (href) source = { url: href, title: text };
+      if (href) addSource(sources, { url: href, title: text });
       continue;
     }
 
@@ -302,7 +302,7 @@ export function parseEntry(entry) {
   // If the body carried no prose at all, fall back to the Content property so
   // that even a blank page still renders a readable card.
   if (prose.size === 0 && entry.summary) {
-    addProse('what-happened', `<p>${escapeHtml(entry.summary)}</p>`);
+    addProse('what-happened', `<p>${escapeText(entry.summary)}</p>`);
   }
 
   const sections = SECTION_ORDER.filter((key) => prose.has(key)).map((key) => ({
@@ -319,7 +319,21 @@ export function parseEntry(entry) {
     sections.push({ key, label: titleCase(key), html: joinProse(parts) });
   }
 
-  return { ...entry, sections, figures, term, source, bodyFormat };
+  return { ...entry, sections, figures, term, sources, bodyFormat };
+}
+
+/**
+ * Record a source, ignoring a repeat of one already listed.
+ *
+ * An entry can legitimately draw on more than one article, and it should cite
+ * every one it used. The earlier version kept a single source and let each new
+ * one overwrite the last, which silently dropped attribution when an entry was
+ * built from several pieces of reporting.
+ */
+function addSource(sources, candidate) {
+  if (!candidate.url) return;
+  if (sources.some((existing) => existing.url === candidate.url)) return;
+  sources.push({ ...candidate, title: candidate.title || candidate.url });
 }
 
 /** Wrap consecutive list items in a single ul, leaving paragraphs alone. */
