@@ -164,6 +164,10 @@ export function normalizeRow(row) {
     summary: plainText(props.Content?.rich_text),
     date: props.Date?.date?.start?.slice(0, 10) ?? null,
     status: props.Status?.select?.name ?? null,
+    // Set from the Notion Edition property when present. Entries written
+    // before the property existed fall back to their creation time.
+    edition: props.Edition?.select?.name ?? null,
+    createdAt: row.created_time ?? null,
     lastEdited: row.last_edited_time ?? null,
     blocks: [],
   };

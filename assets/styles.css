@@ -1043,3 +1043,26 @@ code {
   white-space: nowrap;
 }
 .source-list a:hover .source-host { color: var(--accent); }
+
+/* Which edition this is, shown beside the date. The brief runs twice a day,
+   so a reader arriving from a notification needs to know which one they
+   opened without inferring it from the content. */
+.entry-edition {
+  padding: 0.2rem 0.55rem;
+  border: 1px solid color-mix(in oklab, var(--accent) 35%, transparent);
+  border-radius: 999px;
+  background: var(--accent-soft);
+  font-size: 0.6rem;
+  letter-spacing: 0.18em;
+  white-space: nowrap;
+}
+
+/* The same distinction in the archive list, kept quiet so the headline stays
+   the thing being scanned. */
+.archive-edition {
+  display: block;
+  margin-top: 0.3rem;
+  color: var(--text-faint);
+  font-size: 0.6rem;
+  letter-spacing: 0.12em;
+}

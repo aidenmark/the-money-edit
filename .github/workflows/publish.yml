@@ -13,37 +13,36 @@
 name: Publish
 
 on:
-  # The brief is written after the closing bell, not before the opening one.
+  # The brief runs twice a weekday, so the site rebuilds twice.
   #
-  # The reason is the content. The entry format is what happened, why it
-  # happened, and the key figures, which is a complete story and needs a
-  # completed session. Closing prices are final by 4:05pm Eastern, and the
-  # journalism that explains the day publishes between 4:15 and 5:30. Before
-  # the open there is nothing but futures, which for a long term reader is
-  # noise. An evening entry is also dated the same day it describes, where a
-  # morning one would be dated the day after the session it reports.
+  #   Opening bell   task writes ~9:00am Eastern, builds at 9:10 and 9:20
+  #   Closing bell   task writes ~5:15pm Eastern, builds at 5:30 and 5:45
   #
-  # Task writes at 5:15pm Eastern. Build at 5:30 with a retry at 5:45, since
-  # GitHub does not guarantee cron punctuality and delays of ten minutes or
-  # more happen under load.
+  # Each pair is a real run plus a retry, because GitHub does not guarantee
+  # cron punctuality and delays of ten minutes or more happen under load. The
+  # morning pair still lands before the 9:30 opening bell even when delayed.
   #
-  # Cron in Actions is always UTC and ignores daylight saving, so each Eastern
-  # time is listed twice. One of each pair is a harmless no change rebuild:
+  # Cron in Actions is always UTC and ignores daylight saving, so every Eastern
+  # time is listed twice. One of each pair is a harmless no change rebuild
+  # depending on the season, which costs nothing and removes a whole class of
+  # twice yearly bug:
   #
+  #   13:10 / 13:20 UTC  =  9:10 / 9:20am Eastern in summer
+  #   14:10 / 14:20 UTC  =  9:10 / 9:20am Eastern in winter
   #   21:30 / 21:45 UTC  =  5:30 / 5:45pm Eastern in summer
   #   22:30 / 22:45 UTC  =  5:30 / 5:45pm Eastern in winter
-  #
-  # The 12:00 UTC pass is a morning safety net, so anything edited overnight is
-  # live by the time anyone looks.
   #
   # For a build that lands within a minute of the entry rather than waiting for
   # a scheduler, see repository_dispatch below. Cron is the fallback.
   schedule:
+    - cron: '10 13 * * 1-5'
+    - cron: '20 13 * * 1-5'
+    - cron: '10 14 * * 1-5'
+    - cron: '20 14 * * 1-5'
     - cron: '30 21 * * 1-5'
     - cron: '45 21 * * 1-5'
     - cron: '30 22 * * 1-5'
     - cron: '45 22 * * 1-5'
-    - cron: '0 12 * * 1-5'
 
   # Publish on demand from outside GitHub. This is how the scheduled task can
   # rebuild the site the moment it finishes writing an entry, instead of the

@@ -10,7 +10,14 @@
  * means the site works with scripting disabled and has nothing to hydrate.
  */
 
-import { escapeHtml, escapeText, formatLongDate, formatShortDate, stableHash } from './util.js';
+import {
+  escapeHtml,
+  escapeText,
+  formatLongDate,
+  formatShortDate,
+  stableHash,
+  EDITIONS,
+} from './util.js';
 
 /**
  * Where the site is served from.
@@ -26,15 +33,7 @@ export const ORIGIN = process.env.SITE_ORIGIN ?? 'https://aidenmark.github.io';
 
 export const SITE_NAME = 'The Money Edit';
 
-/**
- * The label on the figures card.
- *
- * The brief is written after the close, so the numbers on it are the day's
- * final ones. Calling the card "Opening bell" would have been describing the
- * wrong end of the session. If the delivery time ever moves back before the
- * open, this string and the cron in publish.yml are the two things to change.
- */
-export const FIGURES_LABEL = 'Closing bell';
+
 export const SITE_TAGLINE =
   'A daily read on markets and money, written plainly, so you can tell what it means for yours.';
 
@@ -154,7 +153,8 @@ function footer() {
 /**
  * The path an entry is published at.
  *
- * Date only, as /2026/08/18/. The headline is deliberately not in the URL.
+ * Date and edition, as /2026/08/18/closing/. The headline is deliberately not
+ * in the URL.
  *
  * The reason is the morning notification. A static site cannot send one, so
  * the push comes from the scheduled task, and for it to link straight to the
@@ -162,14 +162,27 @@ function footer() {
  * would require knowing the headline before it is written, which the sender
  * does not.
  *
- * Two entries can share a date, which has already happened once, so a second
- * entry on the same day takes a numbered suffix. The first keeps the clean
- * path so the predictable form stays predictable.
+ * The brief runs twice a day, so the date alone no longer identifies an entry.
+ * The edition segment does, and both halves are known in advance, so the
+ * address is still constructible without knowing the headline. The bare date
+ * path redirects to that day's most recent edition, so /2026/08/18/ also
+ * works for anyone who trims the URL.
+ *
+ * A third entry on one date and edition would collide, so it takes a numbered
+ * suffix. That should not happen, but a URL collision is a silent way to lose
+ * a page and three lines is cheap insurance.
  */
 export function entryPath(entry) {
   const [year, month, day] = entry.date.split('-');
+  const edition = entry.edition?.key ?? EDITIONS.closing.key;
   const suffix = entry.dateIndex > 0 ? `${entry.dateIndex + 1}/` : '';
-  return `/${year}/${month}/${day}/${suffix}`;
+  return `/${year}/${month}/${day}/${edition}/${suffix}`;
+}
+
+/** The bare date path, which redirects to that day's most recent edition. */
+export function dayPath(isoDate) {
+  const [year, month, day] = isoDate.split('-');
+  return `/${year}/${month}/${day}/`;
 }
 
 /* -------------------------------------------------------------------------
@@ -186,6 +199,7 @@ export function entryPath(entry) {
  */
 export function renderCard(entry, { previous = null, next = null } = {}) {
   const accent = accentFor(entry.date);
+  const edition = entry.edition ?? EDITIONS.closing;
   let step = 0;
   const rise = () => `class="widget rise" style="--step:${step++}"`;
 
@@ -209,13 +223,14 @@ export function renderCard(entry, { previous = null, next = null } = {}) {
   parts.push(`<p class="entry-stamp rise" style="--step:${step++}">
 <span class="bell-dot" aria-hidden="true"></span>
 <time datetime="${escapeHtml(entry.date)}">${escapeText(formatLongDate(entry.date))}</time>
+<span class="entry-edition">${escapeText(edition.label)}</span>
 </p>`);
 
   // The figures card is the numbers, and only the numbers. When an entry
   // reports none, the card is absent rather than empty.
   if (entry.figures.length > 0) {
     parts.push(`<section ${rise().replace('widget', 'widget widget--bell')} aria-labelledby="bell-heading">
-<p class="bell-strip" id="bell-heading">${escapeText(FIGURES_LABEL)}</p>
+<p class="bell-strip" id="bell-heading">${escapeText(edition.label)}</p>
 <div class="tape">
 ${headline.map(tapeTile).join('\n')}
 </div>${
@@ -377,6 +392,12 @@ export function shortenLabel(label) {
   if (/^dow jones/i.test(text)) return 'Dow';
   if (/^nasdaq composite$/i.test(text)) return 'Nasdaq';
 
+  // "S&P 500 futures" does not fit a tile. The index number is redundant once
+  // the word futures is there, since there is only one S&P futures contract
+  // anyone means, so it becomes "S&P futures".
+  const futures = /^(.+?)\s+\d+\s+futures$/i.exec(text);
+  if (futures) return `${futures[1]} futures`;
+
   // "30-year Treasury yield" reads better as "30Y Treasury" at this size.
   const treasury = /^(\d+)[\s-]*year\s+(.+?)(\s+yield)?$/i.exec(text);
   if (treasury) return `${treasury[1]}Y ${treasury[2]}`;
@@ -448,7 +469,9 @@ function archiveList(entries, windowDays, olderCount = 0) {
     .map(
       (entry, index) => `<li class="archive-item rise" style="--step:${index + 1}">
 <a class="archive-link" href="${url(entryPath(entry))}">
-<span class="archive-date">${escapeText(formatShortDate(entry.date))}</span>
+<span class="archive-date">${escapeText(formatShortDate(entry.date))}<span class="archive-edition">${escapeText(
+        (entry.edition ?? EDITIONS.closing).note
+      )}</span></span>
 <span class="archive-title">${escapeText(entry.headline)}</span>
 <span class="archive-arrow" aria-hidden="true">&rarr;</span>
 </a>
@@ -667,4 +690,30 @@ export function renderManifest() {
     null,
     2
   );
+}
+
+/**
+ * A redirect at the bare date path, /2026/08/18/, landing on that day's most
+ * recent edition.
+ *
+ * Two entries a day means the date alone is ambiguous, but people trim URLs
+ * and older links may predate the edition segment. Pointing the date at the
+ * evening edition, which is the fuller one, is the sensible default.
+ */
+export function renderDayRedirect(entry) {
+  const target = url(entryPath(entry));
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="refresh" content="0; url=${escapeHtml(target)}">
+<link rel="canonical" href="${escapeHtml(`${ORIGIN}${target}`)}">
+<meta name="robots" content="noindex">
+<title>${escapeHtml(SITE_NAME)}</title>
+</head>
+<body>
+<p><a href="${escapeHtml(target)}">${escapeText(entry.headline)}</a></p>
+</body>
+</html>
+`;
 }
