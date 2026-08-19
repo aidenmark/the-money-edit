@@ -1,0 +1,17 @@
+{
+  "name": "the-money-edit",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A daily finance and markets brief in plain language, published from Notion to a static site.",
+  "type": "module",
+  "engines": {
+    "node": ">=18.17.0"
+  },
+  "scripts": {
+    "build": "node src/build.js",
+    "build:offline": "node src/build.js --offline",
+    "test": "node --test test/"
+  },
+  "keywords": ["notion", "static-site", "finance"],
+  "license": "MIT"
+}

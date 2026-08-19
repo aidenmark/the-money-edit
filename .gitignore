@@ -1,0 +1,21 @@
+# Build output. The site is generated on every build, so it is never committed.
+dist/
+
+# Local secrets. NOTION_TOKEN lives here for local builds and in a GitHub
+# Actions secret for scheduled builds. It must never reach the repo.
+.env
+.env.*
+!.env.example
+
+# Cached Notion responses from `npm run fetch`, used to build without a token.
+.cache/
+
+# Editor and OS noise
+.DS_Store
+.vscode/
+.idea/
+node_modules/
+
+# Local planning notes. Kept out of the public repo by default because the
+# brief contains personal job search context. Remove this line to publish it.
+the-money-edit-brief.md
