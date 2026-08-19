@@ -7,31 +7,61 @@ whatever is in Notion into the site.
 Paste each into its own recurring task in claude.ai. They replace the single
 9:30am task.
 
-| Task | Cron (UTC) | Eastern, summer | Eastern, winter | Writes |
+Each edition runs on **two** cron entries, and the prompt refuses the wrong one.
+That is what pins the delivery to the same Eastern time all year.
+
+| Edition | Cron (UTC) | Fires at, summer | Fires at, winter | Actually writes |
 |---|---|---|---|---|
-| Opening Bell | `0 13 * * 1-5` | 9:00am | 8:00am | A short pre-market scan |
-| Closing Bell | `15 22 * * 1-5` | 6:15pm | 5:15pm | The full recap of the session |
+| Opening Bell | `0 13 * * 1-5` | 9:00am ET | 8:00am ET | summer |
+| Opening Bell | `0 14 * * 1-5` | 10:00am ET | 9:00am ET | winter |
+| Closing Bell | `15 21 * * 1-5` | 5:15pm ET | 4:15pm ET | summer |
+| Closing Bell | `15 22 * * 1-5` | 6:15pm ET | 5:15pm ET | winter |
 
-### Why those UTC times, and not the obvious ones
+Net result: **9:00am and 5:15pm Eastern, every weekday, all year.**
 
-Task cron runs on fixed UTC and does not follow daylight saving, so every
-schedule is two different Eastern times across the year. Both have to work, or
-the brief quietly degrades for five months.
+### Why this is needed
 
-**Closing Bell must never fire before 5:00pm Eastern.** The journalism that
-explains a session publishes between 4:15 and 5:30pm. `15 21` looks right in
-summer, at 5:15pm, but becomes 4:15pm in winter, fifteen minutes after the
-close and before the good sources exist. `15 22` is 6:15pm in summer and
-5:15pm in winter, so it is always late enough. An hour of summer lateness for
-an evening read costs nothing.
+Task cron runs on fixed UTC and does not follow daylight saving, so any single
+schedule is two different Eastern times across the year. One cron cannot hold a
+fixed local time. Two can, if the task knows which firing is the real one.
 
-**Opening Bell is safe either way.** 8:00am in winter is still well inside
-pre-market, which opens at 4:00am, and the site rebuilds before the 9:30 bell
-in both seasons.
+### How the prompt decides
 
-Do not solve this with a calendar reminder to shift the times in November. A
-seasonal manual step is the failure mode this whole project is built to avoid.
-Pick times that hold year round instead.
+Two guards at the very top of each prompt, before any research, so a wrong
+firing costs nothing.
+
+1. **Time gate.** Stop unless the current time in `America/New_York` is at or
+   past the edition's hour. This kills the too early firing.
+2. **Duplicate check.** Stop if an entry already exists for today's date with
+   this edition. This kills the too late firing, and also protects against a
+   manual test fire filing a second entry.
+
+Walk it through for Opening Bell, gate set at 8:45am Eastern:
+
+| Season | Firing | Eastern | Time gate | Duplicate check | Result |
+|---|---|---|---|---|---|
+| Summer | 13:00 UTC | 9:00am | pass | none yet | **writes** |
+| Summer | 14:00 UTC | 10:00am | pass | already exists | stops |
+| Winter | 13:00 UTC | 8:00am | **stops** | not reached | stops |
+| Winter | 14:00 UTC | 9:00am | pass | none yet | **writes** |
+
+Closing Bell is the same shape with the gate at 5:00pm Eastern.
+
+The order matters. The gate has to come before the duplicate check, or the
+winter 8:00am firing would write first and the 9:00am one would be rejected as
+a duplicate, which is the failure this is meant to prevent.
+
+### If claude.ai lets you set a timezone on the task
+
+Check first. If a task can be scheduled in `America/New_York` rather than UTC,
+use that and skip all of this: one cron per edition, no time gate, and keep the
+duplicate check only as protection against manual test fires. The two cron
+approach exists because fixed UTC leaves no other way to hold a local time.
+
+### If a task only supports one cron
+
+Make two tasks per edition, one at each UTC time, with identical prompts. The
+guards make the extra firing a no op, so four tasks behave as two.
 
 Both write into the same Notion database and are distinguished by the `Edition`
 property, which **already exists** with options `Opening Bell` and
@@ -73,12 +103,39 @@ on the very first entry of this project.
 
 ## Opening Bell
 
-Cron `0 13 * * 1-5`. Before the opening bell in both seasons.
+Crons `0 13 * * 1-5` and `0 14 * * 1-5`. Writes at 9:00am Eastern all year.
 
 ```
 You write the Opening Bell edition of The Money Edit, a daily finance brief for
 someone smart who does not work in finance and is building real fluency in money
 and markets.
+
+BEFORE DOING ANYTHING ELSE, RUN THESE TWO CHECKS IN ORDER
+
+This task is scheduled on two UTC crons, because cron does not follow daylight
+saving and one schedule cannot hold a fixed Eastern time. Exactly one of the two
+firings each day is the real one. These checks decide which, so run them before
+any research and stop immediately if either says stop.
+
+1. TIME GATE
+   Work out the current time in America/New_York.
+   If it is earlier than 8:45am Eastern, stop now. File nothing, send nothing,
+   and do not explain. This is the off season firing and it is meant to do
+   nothing.
+
+2. DUPLICATE CHECK
+   Query the Notion database for an entry whose Date is today in
+   America/New_York and whose Edition is Opening Bell.
+   If one already exists, stop now. File nothing and send nothing. Today's
+   edition has already been written, either by the earlier firing or by a
+   manual test.
+
+Run the gate before the duplicate check, never the other way round. In winter
+the 8:00am firing must be stopped by the gate. If it were allowed to write
+first, the real 9:00am firing would then be rejected as a duplicate, which is
+the exact failure this is preventing.
+
+Only if both checks pass, continue.
 
 This edition is a scan, not an essay. It should be readable in under a minute.
 The market opens at 9:30am Eastern, so there is no news from today's session
@@ -153,13 +210,41 @@ https://aidenmark.github.io/the-money-edit/latest/
 
 ## Closing Bell
 
-Cron `15 22 * * 1-5`. After the close and after the explainers publish, in
-both seasons.
+Crons `15 21 * * 1-5` and `15 22 * * 1-5`. Writes at 5:15pm Eastern all year.
 
 ```
 You write the Closing Bell edition of The Money Edit, a daily finance brief for
 someone smart who does not work in finance and is building real fluency in money
 and markets.
+
+BEFORE DOING ANYTHING ELSE, RUN THESE TWO CHECKS IN ORDER
+
+This task is scheduled on two UTC crons, because cron does not follow daylight
+saving and one schedule cannot hold a fixed Eastern time. Exactly one of the two
+firings each day is the real one. These checks decide which, so run them before
+any research and stop immediately if either says stop.
+
+1. TIME GATE
+   Work out the current time in America/New_York.
+   If it is earlier than 5:00pm Eastern, stop now. File nothing, send nothing,
+   and do not explain. This is the off season firing and it is meant to do
+   nothing. The gate is set at 5:00pm because the journalism that explains a
+   session publishes between 4:15 and 5:30pm, so an earlier entry would be
+   written without the sources that make it worth reading.
+
+2. DUPLICATE CHECK
+   Query the Notion database for an entry whose Date is today in
+   America/New_York and whose Edition is Closing Bell.
+   If one already exists, stop now. File nothing and send nothing. Today's
+   edition has already been written, either by the earlier firing or by a
+   manual test.
+
+Run the gate before the duplicate check, never the other way round. In winter
+the 4:15pm firing must be stopped by the gate. If it were allowed to write
+first, the real 5:15pm firing would then be rejected as a duplicate, which is
+the exact failure this is preventing.
+
+Only if both checks pass, continue.
 
 This is the full read of the day and where the teaching happens. The market
 closed at 4:00pm Eastern, so the session is complete and the numbers are final.
