@@ -73,7 +73,8 @@
 
   /* Rhythm */
   --measure: 34rem;     /* comfortable reading width for prose */
-  --frame: 68rem;       /* outer page width */
+  --frame: 58rem;       /* outer page width, sized to hold the measure plus the rail */
+  --rail: 19rem;        /* width of the figures column on a wide screen */
   --gutter: clamp(1.25rem, 0.6rem + 3vw, 3.5rem);
 
   --radius: 14px;
@@ -352,9 +353,53 @@ code {
 .masthead-nav a[aria-current='page'] { color: var(--accent); }
 
 
-/* 7. Entry card ============================================================ */
+/* 7. Entry card ============================================================
+   A three part grid: a full width head, a prose column, and a figures rail.
 
-.card { padding-top: clamp(2.5rem, 1rem + 6vw, 5.5rem); }
+   Below 64rem it is a single column in document order, which is why the rail
+   is written before the prose in the markup. Figures belong under the lede on
+   a phone, not at the bottom of the page. Above 64rem, explicit placement
+   moves the rail into the second column and the reading order is still right.
+   ========================================================================== */
+
+.card {
+  padding-top: clamp(2.5rem, 1rem + 6vw, 5.5rem);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  column-gap: 3.5rem;
+}
+
+@media (min-width: 64rem) {
+  .card { grid-template-columns: minmax(0, 1fr) var(--rail); }
+
+  .card-head { grid-column: 1 / -1; grid-row: 1; }
+  .card-main { grid-column: 1; grid-row: 2; }
+
+  .card-rail {
+    grid-column: 2;
+    grid-row: 2;
+    /* Without this the grid item stretches to the full row height and sticky
+       has no slack to move within, so the rail would never actually stick. */
+    align-self: start;
+    position: sticky;
+    top: 2.5rem;
+  }
+
+  /* The rail is narrow, so the tiles stack instead of sitting side by side. */
+  .card-rail .figures-grid { grid-template-columns: 1fr; }
+
+  /* With no figures there is no second column to balance, so the prose
+     takes the full width rather than leaving a gap where the rail would be. */
+  .card--no-rail { grid-template-columns: minmax(0, 1fr); }
+  .card--no-rail .card-main { grid-column: 1 / -1; }
+}
+
+/* The rail carries its own bottom spacing only when it is stacked, because in
+   the two column layout the grid gap already handles it. */
+.card-rail { margin-bottom: 3.25rem; }
+@media (min-width: 64rem) {
+  .card-rail { margin-bottom: 0; }
+}
 
 .card-date {
   font-family: var(--font-mono);
@@ -433,7 +478,7 @@ code {
 
 .figures {
   position: relative;
-  margin: 0 0 3.25rem;
+  margin: 0;
   padding: 1.75rem;
   background: linear-gradient(160deg, var(--surface-glass), transparent 60%);
   border: 1px solid var(--line);
