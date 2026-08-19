@@ -25,6 +25,16 @@ export const BASE = process.env.SITE_BASE ?? '/the-money-edit';
 export const ORIGIN = process.env.SITE_ORIGIN ?? 'https://aidenmark.github.io';
 
 export const SITE_NAME = 'The Money Edit';
+
+/**
+ * The label on the figures card.
+ *
+ * The brief is written after the close, so the numbers on it are the day's
+ * final ones. Calling the card "Opening bell" would have been describing the
+ * wrong end of the session. If the delivery time ever moves back before the
+ * open, this string and the cron in publish.yml are the two things to change.
+ */
+export const FIGURES_LABEL = 'Closing bell';
 export const SITE_TAGLINE =
   'A daily read on markets and money, written plainly, so you can tell what it means for yours.';
 
@@ -189,7 +199,7 @@ export function renderCard(entry, { previous = null, next = null } = {}) {
 
   /* The datestamp sits outside the cards, above the stack.
    *
-   * It used to live inside the opening bell card, which meant an entry with
+   * It used to live inside the closing bell card, which meant an entry with
    * no key figures rendered with no date anywhere on the page. That is a real
    * defect for a daily brief, and it will happen the moment the content
    * broadens past markets, since a car or travel entry has no index levels to
@@ -201,11 +211,11 @@ export function renderCard(entry, { previous = null, next = null } = {}) {
 <time datetime="${escapeHtml(entry.date)}">${escapeText(formatLongDate(entry.date))}</time>
 </p>`);
 
-  // The opening bell card is the numbers, and only the numbers. When an entry
+  // The figures card is the numbers, and only the numbers. When an entry
   // reports none, the card is absent rather than empty.
   if (entry.figures.length > 0) {
     parts.push(`<section ${rise().replace('widget', 'widget widget--bell')} aria-labelledby="bell-heading">
-<p class="bell-strip" id="bell-heading">Opening bell</p>
+<p class="bell-strip" id="bell-heading">${escapeText(FIGURES_LABEL)}</p>
 <div class="tape">
 ${headline.map(tapeTile).join('\n')}
 </div>${
