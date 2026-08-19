@@ -30,6 +30,8 @@ import {
   renderGlossary,
   renderFullArchive,
   renderLatestRedirect,
+  renderDayRedirect,
+  dayPath,
   renderManifest,
   entryPath,
   url,
@@ -37,7 +39,7 @@ import {
   SITE_NAME,
   SITE_TAGLINE,
 } from './render.js';
-import { todayInNewYork, daysBetween, slugify, escapeHtml } from './util.js';
+import { todayInNewYork, daysBetween, slugify, escapeHtml, resolveEdition } from './util.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -114,22 +116,27 @@ export function selectPublishable(entries, today) {
 }
 
 /**
- * Order entries newest first, and break a same day tie by substance.
+ * Order entries newest first.
  *
- * The tiebreak is not cosmetic. Only the first entry on a date gets the clean
- * /2026/08/14/ path that the morning notification can construct, and any
- * other entry that day is pushed to a suffixed URL. Sorting on date alone
- * left that choice to whatever order Notion happened to return, which meant a
- * one line stub could take the canonical URL and push the real writeup to
- * /2026/08/14/2/. The database already contains exactly that pair.
+ * Two entries a day means date alone is not enough. Within a day the evening
+ * edition sorts ahead of the morning one, so "newest first" stays true in the
+ * archive, in the previous and next chain, and in what /latest/ points at.
  *
- * Substance is measured by how much page body an entry has, then by the
- * length of its summary. The id is the final tiebreak purely so the ordering
- * is total and a rebuild can never produce different URLs from the same data.
+ * A same date and same edition collision should never happen, but if it does
+ * the fuller entry takes the clean URL rather than whichever Notion returned
+ * first. The id is the final tiebreak purely so the ordering is total and a
+ * rebuild can never produce different URLs from the same data.
  */
-export function byDateThenSubstance(a, b) {
+export function byDateThenEdition(a, b) {
   if (a.date !== b.date) return b.date.localeCompare(a.date);
 
+  // Within a day, the evening edition is the more recent one and sorts first.
+  const aEvening = a.edition?.key === 'closing' ? 0 : 1;
+  const bEvening = b.edition?.key === 'closing' ? 0 : 1;
+  if (aEvening !== bEvening) return aEvening - bEvening;
+
+  // Same date and same edition should not happen. If it does, the entry with
+  // more to it wins the clean URL rather than whichever Notion returned first.
   const blocks = (b.blocks?.length ?? 0) - (a.blocks?.length ?? 0);
   if (blocks !== 0) return blocks;
 
@@ -147,16 +154,17 @@ export function byDateThenSubstance(a, b) {
  * happened yet but costs three lines to make impossible.
  */
 export function assignSlugs(entries) {
-  // How many entries already seen for a given date. The first entry of a day
-  // gets the clean /2026/08/18/ path, which is the one the morning
-  // notification can construct without knowing anything but the date. Any
-  // second entry that day is suffixed rather than colliding.
-  const perDate = new Map();
+  // How many entries already seen for a given date and edition. Each slot
+  // takes the clean /2026/08/18/closing/ path, which is constructible from the
+  // date and the edition without knowing the headline. A duplicate in the same
+  // slot is suffixed rather than silently overwriting the page.
+  const perSlot = new Map();
 
   for (const entry of entries) {
-    const seen = perDate.get(entry.date) ?? 0;
+    const slot = `${entry.date}/${entry.edition?.key ?? 'closing'}`;
+    const seen = perSlot.get(slot) ?? 0;
     entry.dateIndex = seen;
-    perDate.set(entry.date, seen + 1);
+    perSlot.set(slot, seen + 1);
     entry.slug = slugify(entry.headline) || 'entry';
   }
   return entries;
@@ -389,7 +397,9 @@ async function main() {
 
   const all = await loadEntries();
   const published = assignSlugs(
-    selectPublishable(all, today).sort(byDateThenSubstance)
+    selectPublishable(all, today)
+      .map((entry) => ({ ...entry, edition: resolveEdition(entry) }))
+      .sort(byDateThenEdition)
   ).map(parseEntry);
 
   console.log(
@@ -435,6 +445,16 @@ async function main() {
   // nothing is published, so the link never 404s.
   if (published.length > 0) {
     await write('latest/index.html', renderLatestRedirect(published[0]));
+  }
+
+  // A redirect at each bare date, landing on that day's most recent edition,
+  // so a trimmed URL still resolves. Entries are newest first, so the first
+  // one seen for a date is the one to point at.
+  const daysWritten = new Set();
+  for (const entry of published) {
+    if (daysWritten.has(entry.date)) continue;
+    daysWritten.add(entry.date);
+    await write(`${dayPath(entry.date).replace(/^\//, '')}index.html`, renderDayRedirect(entry));
   }
 
   await write('manifest.webmanifest', renderManifest());

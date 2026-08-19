@@ -24,8 +24,10 @@ import {
   renderManifest,
   renderFullArchive,
   hostOf,
+  renderDayRedirect,
+  dayPath,
 } from '../src/render.js';
-import { normalizeDashes } from '../src/util.js';
+import { normalizeDashes, EDITIONS } from '../src/util.js';
 
 /** Match how the renderer escapes text, so assertions compare like with like. */
 const escapeForTest = (text) => String(text).replace(/&/g, '&amp;');
@@ -169,30 +171,72 @@ test('the accent is stable for a date and differs between dates', () => {
   assert.match(accentFor('2026-08-18').className, /^accent-[0-7]$/);
 });
 
-test('entry paths are built from the date alone', () => {
-  // The morning push notification has to construct this URL knowing only the
-  // date. A slug would require knowing the headline before it is written.
-  assert.equal(entryPath({ date: '2026-08-18', dateIndex: 0 }), '/2026/08/18/');
+test('entry paths carry the date and the edition', () => {
+  // The push notification has to construct this knowing only the date and
+  // which edition just went out. A slug would need the headline.
+  assert.equal(
+    entryPath({ date: '2026-08-18', edition: EDITIONS.closing, dateIndex: 0 }),
+    '/2026/08/18/closing/'
+  );
+  assert.equal(
+    entryPath({ date: '2026-08-18', edition: EDITIONS.opening, dateIndex: 0 }),
+    '/2026/08/18/opening/'
+  );
 });
 
-test('a second entry on the same day is suffixed, the first stays clean', () => {
-  // Two entries already share 2026-08-14 in the database. The first must keep
-  // the predictable path so the notification link stays correct.
-  assert.equal(entryPath({ date: '2026-08-14', dateIndex: 0 }), '/2026/08/14/');
-  assert.equal(entryPath({ date: '2026-08-14', dateIndex: 1 }), '/2026/08/14/2/');
+test('the two editions of one day never collide', () => {
+  const morning = { date: '2026-08-18', edition: EDITIONS.opening, dateIndex: 0 };
+  const evening = { date: '2026-08-18', edition: EDITIONS.closing, dateIndex: 0 };
+  assert.notEqual(entryPath(morning), entryPath(evening));
+});
+
+test('a duplicate in the same slot is suffixed rather than overwriting', () => {
+  assert.equal(
+    entryPath({ date: '2026-08-18', edition: EDITIONS.closing, dateIndex: 1 }),
+    '/2026/08/18/closing/2/'
+  );
+});
+
+test('the bare date path resolves to that day', () => {
+  assert.equal(dayPath('2026-08-18'), '/2026/08/18/');
+});
+
+test('the day redirect lands on that day most recent edition', () => {
+  const html = renderDayRedirect({
+    date: '2026-08-18',
+    edition: EDITIONS.closing,
+    dateIndex: 0,
+    headline: 'Bond yields hit a 2007 high',
+  });
+  assert.match(html, /url=[^"]*\/2026\/08\/18\/closing\//);
+  assert.match(html, /name="robots" content="noindex"/);
 });
 
 test('the latest redirect points at the newest entry and is not indexed', () => {
   const html = renderLatestRedirect({
     date: '2026-08-18',
+    edition: EDITIONS.closing,
     dateIndex: 0,
     headline: 'Bond yields hit a 2007 high',
   });
 
-  assert.match(html, /http-equiv="refresh" content="0; url=[^"]*\/2026\/08\/18\//);
+  assert.match(html, /http-equiv="refresh" content="0; url=[^"]*\/2026\/08\/18\/closing\//);
   assert.match(html, /name="robots" content="noindex"/);
-  // A plain link has to survive for anyone whose browser blocks the refresh.
-  assert.match(html, /<a href="[^"]*\/2026\/08\/18\/">/);
+  assert.match(html, /<a href="[^"]*\/2026\/08\/18\/closing\/">/);
+});
+
+test('the card names its edition, in the stamp and on the figures card', () => {
+  // Two briefs a day means a reader arriving from a notification has to know
+  // which one they opened without inferring it from the content.
+  const morning = parseEntry({
+    ...fixtures.entries.find((e) => e.edition === 'Opening Bell'),
+    edition: EDITIONS.opening,
+  });
+  const html = renderCard(morning);
+
+  assert.match(html, /class="entry-edition">Opening bell</);
+  assert.match(html, /id="bell-heading">Opening bell</);
+  assert.ok(!html.includes('Closing bell'));
 });
 
 test('the manifest opens on the latest entry in standalone mode', () => {
@@ -339,4 +383,12 @@ test('every entry carries its date, with or without figures', () => {
   // The bell card itself is still conditional. It is the numbers, and an
   // entry with no numbers should not render an empty one.
   assert.ok(!renderCard(bare).includes('widget--bell'));
+});
+
+test('a futures label is shortened without losing which contract it is', () => {
+  // "S&P 500 futures" was truncating to "S&P 500 FUTUR..." in a tile.
+  assert.equal(shortenLabel('S&P 500 futures'), 'S&P futures');
+  assert.equal(shortenLabel('Nasdaq 100 futures'), 'Nasdaq futures');
+  // Nothing to shorten here, so it is left alone.
+  assert.equal(shortenLabel('Brent crude'), 'Brent crude');
 });

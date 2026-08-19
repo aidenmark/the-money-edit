@@ -12,11 +12,12 @@ import assert from 'node:assert/strict';
 
 import {
   selectPublishable,
-  byDateThenSubstance,
+  byDateThenEdition,
   assignSlugs,
   collectGlossary,
 } from '../src/build.js';
 import { entryPath } from '../src/render.js';
+import { EDITIONS, resolveEdition } from '../src/util.js';
 
 const entry = (overrides) => ({
   id: 'id-1',
@@ -24,6 +25,7 @@ const entry = (overrides) => ({
   summary: 'A summary.',
   date: '2026-08-18',
   status: 'Published',
+  edition: EDITIONS.closing,
   blocks: [],
   ...overrides,
 });
@@ -52,25 +54,6 @@ test('an entry with no date is never published', () => {
   assert.equal(selectPublishable([entry({ date: null })], '2026-08-18').length, 0);
 });
 
-test('the substantive entry wins the clean URL on a shared date', () => {
-  // The database holds exactly this pair on 2026-08-14: a full writeup and a
-  // one line stub. Only the first gets /2026/08/14/, which is the address the
-  // morning notification can construct, so the stub must not take it.
-  const stub = entry({ id: 'stub', date: '2026-08-14', summary: 'Short.', blocks: [] });
-  const full = entry({
-    id: 'full',
-    date: '2026-08-14',
-    summary: 'A considerably longer summary of what actually happened.',
-    blocks: [{ type: 'paragraph' }, { type: 'paragraph' }],
-  });
-
-  const ordered = assignSlugs([stub, full].sort(byDateThenSubstance));
-
-  assert.equal(ordered[0].id, 'full');
-  assert.equal(entryPath(ordered[0]), '/2026/08/14/');
-  assert.equal(entryPath(ordered[1]), '/2026/08/14/2/');
-});
-
 test('ordering is total, so a rebuild cannot change the URLs', () => {
   // Two entries identical in every way the comparator looks at still have to
   // order the same way every time, or a rebuild would silently move a page.
@@ -78,8 +61,8 @@ test('ordering is total, so a rebuild cannot change the URLs', () => {
   const b = entry({ id: 'bbb', date: '2026-08-14' });
 
   assert.deepEqual(
-    [a, b].sort(byDateThenSubstance).map((e) => e.id),
-    [b, a].sort(byDateThenSubstance).map((e) => e.id)
+    [a, b].sort(byDateThenEdition).map((e) => e.id),
+    [b, a].sort(byDateThenEdition).map((e) => e.id)
   );
 });
 
@@ -87,7 +70,7 @@ test('newest entry sorts first', () => {
   const ordered = [
     entry({ id: 'old', date: '2026-08-14' }),
     entry({ id: 'new', date: '2026-08-18' }),
-  ].sort(byDateThenSubstance);
+  ].sort(byDateThenEdition);
   assert.equal(ordered[0].id, 'new');
 });
 
