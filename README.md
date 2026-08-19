@@ -135,13 +135,16 @@ Notes on the format:
 
 ## Design notes
 
-The brief for the card was the Iron Man interface. I read that as precision and assembly rather than as military hardware, and softened it toward luxury, because the audience for this writing is not an engineering one.
+The brief was the Iron Man interface, and a card that feels like a widget rather than a blog post. The entry is built as a small stack of objects, not a page of prose. Each one is a raised surface with an edge and a shadow, sitting on the background rather than printed onto it. A document is read, an object is glanced at, and this arrives at the opening bell wanting to be glanced at first and read second.
+
+The stack is always the same three beats: the numbers, the story, the word you learned.
 
 - **One accent per day**, chosen by hashing the entry date against eight curated tones. A hash mapped onto the full hue wheel eventually lands on a color that looks wrong against this background, and there is nobody reviewing the site at 9:30am to catch it. A fixed set guarantees every day looks deliberate.
 - **Hash the date, not the headline**, so an entry keeps its tone even if the headline is edited in Notion afterward.
 - **No randomness anywhere.** `Math.random` appears nowhere in the project. A card rebuilt in December has to look identical to how it looked in August.
-- **Numbers get the weight.** The figure panel sits above the prose, because the numbers are what someone opens this for at 9:30am.
-- **Hairlines, not boxes.** Every border is one pixel and faint. Heavier borders turn panels into cards, and cards read as a blog.
+- **Numbers get the weight.** The opening bell card leads, because the numbers are what someone opens this for at 9:30am. The first three figures become large tiles, and the rest drop to a quiet list so nothing reported is ever dropped.
+- **Depth in three layers.** A gradient face, a one pixel inset highlight along the top edge to catch the light, and a wide low shadow underneath to lift the card off the page.
+- **What it means for you is promoted** out of the run of prose. It is the reason the project exists, so it does not render as merely the third heading of three.
 - **The page assembles itself** on load. Each block carries a `--step` index and the stylesheet derives the delay from it, so adding a section never means touching the CSS.
 
 ### Accessibility
