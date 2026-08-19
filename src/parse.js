@@ -55,6 +55,13 @@ const TRAILING_QUALIFIERS =
  */
 const VALUE_TOKEN = /^[$+-]?(?:\d{1,3}(?:,\d{3})+|\d+\.\d+|\d+%|\$\d)/;
 
+/**
+ * A direction word at the very start of a value. Only a leading word is
+ * removed, so "$85.67 a barrel, up 1.4%" keeps its wording intact.
+ */
+const LEADING_DIRECTION_WORD =
+  /^(down|up|fell|rose|climbed|gained|slipped|dropped|declined|lower|higher|surged|jumped)\s+/i;
+
 /** Classify a figure so the card can tint it. */
 function directionOf(text) {
   if (/\b(down|fell|slid|slipped|lower|dropped|declin)/i.test(text)) return 'down';
@@ -98,7 +105,17 @@ export function parseFigure(raw) {
   }
 
   if (!label) return null;
-  return { label, value, direction: directionOf(value || label) };
+
+  const direction = directionOf(value || label);
+
+  // The tile prefixes an arrow for anything that moved, so a value that also
+  // opens with the word would render as "arrow down 0.5%". Drop the word and
+  // keep the arrow, which reads as an instrument rather than as a duplicate.
+  if (direction !== 'flat') {
+    value = value.replace(LEADING_DIRECTION_WORD, '');
+  }
+
+  return { label, value, direction };
 }
 
 /**
