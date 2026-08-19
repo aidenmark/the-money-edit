@@ -65,7 +65,17 @@
   /* A fluid type scale. clamp lets the headline shrink on a phone without a
      media query, which matters because most of these are opened from a
      notification. */
-  --size-hero:  clamp(2.4rem, 1.4rem + 4.4vw, 4.6rem);
+  /* Capped at 3.9rem rather than something larger. Measured against real
+     headlines, Instrument Serif runs about 0.32em per character here, so a
+     44 character headline needs about 810px against a frame of 820px. That
+     is what sets the 3.6rem cap. Larger tips headlines of that length onto
+     a second line holding one or two words, which is the shape that made
+     the block look lopsided. At this size a headline of up to roughly eight
+     words sits on one line and squares up against the measure.
+
+     Headlines can run to ten words, and those still wrap. text-wrap: pretty
+     on the heading keeps the overflow from collapsing to a single orphan. */
+  --size-hero:  clamp(2.2rem, 1.3rem + 3.3vw, 3.6rem);
   --size-lede:  clamp(1.05rem, 0.98rem + 0.34vw, 1.25rem);
   --size-body:  1.0125rem;
   --size-small: 0.8125rem;
@@ -430,8 +440,13 @@ code {
   line-height: 1.03;
   letter-spacing: -0.018em;
   margin: 0;
-  max-width: 18ch;
-  text-wrap: balance;
+  /* Fill the measure rather than balance the lines.
+     text-wrap: balance evens the line lengths by making every line shorter
+     than the container, which is precisely what left the right side empty
+     and made the headline read as pushed to one side. Filling greedily
+     anchors the first line to the full width, which is how a headline is
+     meant to sit. pretty keeps a single trailing word off its own line. */
+  text-wrap: pretty;
 }
 
 .card-lede {
@@ -514,8 +529,9 @@ code {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(13.5rem, 1fr));
   gap: 1px;
-  background: var(--line);
   border-radius: var(--radius-sm);
+  /* Clips the outermost tile rings so they do not double up against the
+     panel border. */
   overflow: hidden;
 }
 
@@ -523,6 +539,13 @@ code {
    through as the divider. One rule instead of managing border sides. */
 .figure {
   background: var(--surface);
+  /* Each tile draws its own hairline rather than the grid painting a
+     background that shows through the gaps. The background trick is neater
+     until an odd number of figures leaves a cell empty, at which point the
+     gap colour fills it and it reads as a broken tile. A ring per tile has
+     no such phantom, and adjacent rings share the one pixel gap so the
+     dividers still look like single hairlines. */
+  box-shadow: 0 0 0 1px var(--line);
   padding: 1rem 1.15rem;
   display: flex;
   flex-direction: column;

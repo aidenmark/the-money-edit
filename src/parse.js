@@ -40,12 +40,19 @@ export const SECTION_LABELS = {
 };
 
 /**
- * Words that trail a label and really belong to the value. Without this,
- * "30-year Treasury above 5.3%" splits into the label "30-year Treasury above"
- * which reads badly in a figure tile.
+ * Words that trail a label and really belong to the value.
+ *
+ * Two problems, one list. "30-year Treasury above 5.3%" would otherwise label
+ * a tile "30-year Treasury above", which reads badly. And "S&P 500 down 0.29%"
+ * would label it "S&P 500 down" with a value of "0.29%", which is worse than
+ * ugly: the direction word never reaches the value, so the tile shows no arrow
+ * and no tint, and the reader loses the fact that the number fell.
+ *
+ * Moving the word onto the value fixes both. Direction is then detected from
+ * the value, and the leading word is dropped once the arrow carries it.
  */
 const TRAILING_QUALIFIERS =
-  /\s+(about|roughly|around|approximately|above|below|near|over|under|at|to)$/i;
+  /\s+(about|roughly|around|approximately|above|below|near|over|under|at|to|down|up|lower|higher|fell|rose|climbed|gained|slipped|dropped)$/i;
 
 /**
  * A token that looks like a reported value rather than part of a name.
