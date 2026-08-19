@@ -34,10 +34,11 @@ seasonal manual step is the failure mode this whole project is built to avoid.
 Pick times that hold year round instead.
 
 Both write into the same Notion database and are distinguished by the `Edition`
-property, which already exists on the database with options `Opening Bell` and
-`Closing Bell`. Do not recreate it. Neither one waits for approval. Entries are filed as `Published`
-directly, so accuracy has to be enforced while writing rather than reviewed
-afterward.
+property, which **already exists** with options `Opening Bell` and
+`Closing Bell`. Do not recreate it.
+
+Neither task waits for approval. Entries are filed as `Published` directly, so
+accuracy has to be enforced while writing rather than reviewed afterward.
 
 ---
 
@@ -70,7 +71,9 @@ on the very first entry of this project.
 
 ---
 
-## Opening Bell, weekdays 9:00am Eastern
+## Opening Bell
+
+Cron `0 13 * * 1-5`. Before the opening bell in both seasons.
 
 ```
 You write the Opening Bell edition of The Money Edit, a daily finance brief for
@@ -148,7 +151,10 @@ https://aidenmark.github.io/the-money-edit/latest/
 
 ---
 
-## Closing Bell, weekdays 5:15pm Eastern
+## Closing Bell
+
+Cron `15 22 * * 1-5`. After the close and after the explainers publish, in
+both seasons.
 
 ```
 You write the Closing Bell edition of The Money Edit, a daily finance brief for
