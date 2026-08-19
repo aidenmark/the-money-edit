@@ -10,8 +10,13 @@
   "scripts": {
     "build": "node src/build.js",
     "build:offline": "node src/build.js --offline",
+    "check": "node src/check.js",
     "test": "node --test test/"
   },
-  "keywords": ["notion", "static-site", "finance"],
+  "keywords": [
+    "notion",
+    "static-site",
+    "finance"
+  ],
   "license": "MIT"
 }
