@@ -23,6 +23,7 @@ import {
   renderLatestRedirect,
   renderManifest,
   renderFullArchive,
+  hostOf,
 } from '../src/render.js';
 import { normalizeDashes } from '../src/util.js';
 
@@ -298,4 +299,18 @@ test('the complete archive groups every entry by month', () => {
   for (const entry of entries) {
     assert.ok(html.includes(escapeForTest(entry.headline)), `missing ${entry.headline}`);
   }
+});
+
+test('attribution renders as its own card, with the publisher shown', () => {
+  const html = renderCard(withFigures);
+
+  assert.match(html, /class="source-list"/);
+  assert.match(html, /class="source-host">finance\.yahoo\.com</);
+  // The title is reproduced exactly as published, dashes and all.
+  assert.match(html, /Nvidia, AMD, Broadcom, Meta Slide as Bond Yields Surge/);
+});
+
+test('hostOf strips www and survives a malformed url', () => {
+  assert.equal(hostOf('https://www.stl.news/some/path'), 'stl.news');
+  assert.equal(hostOf('not a url'), '');
 });

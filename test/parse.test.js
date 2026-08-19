@@ -48,11 +48,12 @@ test('structured entry captures the named term and the source link', () => {
 
   assert.equal(parsed.term.term, 'Treasury yield');
   assert.match(parsed.term.definition, /^A Treasury yield is what the US government pays/);
+  assert.equal(parsed.sources.length, 1);
   assert.equal(
-    parsed.source.url,
+    parsed.sources[0].url,
     'https://finance.yahoo.com/markets/stocks/articles/nvidia-amd-broadcom-meta-slide-154244427.html'
   );
-  assert.equal(parsed.source.title, 'Nvidia, AMD, Broadcom, Meta Slide as Bond Yields Surge');
+  assert.equal(parsed.sources[0].title, 'Nvidia, AMD, Broadcom, Meta Slide as Bond Yields Surge');
 });
 
 test('loose entry still produces prose, figures, a term, and a source', () => {
@@ -68,7 +69,7 @@ test('loose entry still produces prose, figures, a term, and a source', () => {
     direction: 'down',
   });
   assert.equal(parsed.term.term, 'basis point');
-  assert.equal(parsed.source.title, 'STL.News, Stock Market Trading Summary, Monday, August 17, 2026');
+  assert.equal(parsed.sources[0].title, 'STL.News, Stock Market Trading Summary, Monday, August 17, 2026');
 });
 
 test('loose entry moves a trailing qualifier off the label', () => {
@@ -164,4 +165,63 @@ test('a label that legitimately ends in a qualifier still keeps its value', () =
   assert.equal(figure.label, '10-year Treasury');
   assert.equal(figure.value, 'about 4.72%');
   assert.equal(figure.direction, 'flat');
+});
+
+test('an entry built from several articles credits every one of them', () => {
+  // Entries routinely draw on more than one piece of reporting. The earlier
+  // version kept a single source and let each new one overwrite the last,
+  // which silently dropped attribution.
+  const parsed = parseEntry({
+    id: 'multi',
+    headline: 'Two sources',
+    summary: 'Summary.',
+    date: '2026-08-20',
+    blocks: [
+      { type: 'heading_2', heading_2: { rich_text: [{ plain_text: 'Source' }] } },
+      {
+        type: 'paragraph',
+        paragraph: { rich_text: [{ plain_text: 'First report', href: 'https://a.example/1' }] },
+      },
+      {
+        type: 'paragraph',
+        paragraph: { rich_text: [{ plain_text: 'Second report', href: 'https://b.example/2' }] },
+      },
+    ],
+  });
+
+  assert.equal(parsed.sources.length, 2);
+  assert.deepEqual(parsed.sources.map((s) => s.url), ['https://a.example/1', 'https://b.example/2']);
+});
+
+test('the same article listed twice is credited once', () => {
+  const parsed = parseEntry({
+    id: 'dupe',
+    headline: 'One source twice',
+    summary: 'Summary.',
+    date: '2026-08-20',
+    blocks: [
+      { type: 'heading_2', heading_2: { rich_text: [{ plain_text: 'Source' }] } },
+      {
+        type: 'paragraph',
+        paragraph: { rich_text: [{ plain_text: 'A report', href: 'https://a.example/1' }] },
+      },
+      {
+        type: 'paragraph',
+        paragraph: { rich_text: [{ plain_text: 'A report again', href: 'https://a.example/1' }] },
+      },
+    ],
+  });
+
+  assert.equal(parsed.sources.length, 1);
+});
+
+test('an entry with no page body credits nothing rather than inventing a source', () => {
+  const parsed = parseEntry({
+    id: 'bare',
+    headline: 'Bare',
+    summary: 'Summary.',
+    date: '2026-08-20',
+    blocks: [],
+  });
+  assert.deepEqual(parsed.sources, []);
 });

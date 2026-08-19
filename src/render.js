@@ -229,11 +229,25 @@ ${story.join('\n')}
 </aside>`);
   }
 
-  if (entry.source) {
-    parts.push(`<section ${rise()}>
-<p class="entry-source">Source: <a href="${escapeHtml(entry.source.url)}" rel="noopener noreferrer nofollow" target="_blank">${escapeHtml(
-      entry.source.title || entry.source.url
-    )}</a></p>
+  // Attribution gets its own card rather than a line of small print. This
+  // writing is a summary of other people's reporting, so who did that
+  // reporting is part of the entry, not a footnote to it. Titles are
+  // reproduced exactly as published.
+  if (entry.sources.length > 0) {
+    parts.push(`<section ${rise()} aria-labelledby="sources-heading">
+<p class="term-label" id="sources-heading">${
+      entry.sources.length === 1 ? 'Source' : 'Sources'
+    }</p>
+<ul class="source-list">
+${entry.sources
+  .map(
+    (source) => `<li><a href="${escapeHtml(source.url)}" rel="noopener noreferrer nofollow" target="_blank">
+<span class="source-title">${escapeHtml(source.title)}</span>
+<span class="source-host">${escapeHtml(hostOf(source.url))}</span>
+</a></li>`
+  )
+  .join('\n')}
+</ul>
 </section>`);
   }
 
@@ -311,6 +325,20 @@ export function splitFigure(figure) {
   }
 
   return { level, change: change.trim() };
+}
+
+/**
+ * The publisher, derived from the URL, shown beside the article title so
+ * credit is legible at a glance without reading the whole headline.
+ */
+export function hostOf(link) {
+  try {
+    return new URL(link).hostname.replace(/^www\./, '');
+  } catch {
+    // A malformed URL should not take the page down. Showing no publisher is
+    // survivable, showing a crash is not.
+    return '';
+  }
 }
 
 /**
