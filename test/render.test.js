@@ -392,3 +392,27 @@ test('a futures label is shortened without losing which contract it is', () => {
   // Nothing to shorten here, so it is left alone.
   assert.equal(shortenLabel('Brent crude'), 'Brent crude');
 });
+
+test('each edition promotes its own payoff section', () => {
+  // The evening edition highlights what the day means for your money. The
+  // morning edition has no such section, so what to watch is its equivalent
+  // and should get the same treatment rather than reading as a plain heading.
+  const morning = parseEntry({
+    id: 'am',
+    headline: 'Futures point higher',
+    summary: 'Overnight moves.',
+    date: '2026-08-18',
+    edition: EDITIONS.opening,
+    blocks: [
+      { type: 'heading_2', heading_2: { rich_text: [{ plain_text: 'Overnight' }] } },
+      { type: 'paragraph', paragraph: { rich_text: [{ plain_text: 'Asia closed higher.' }] } },
+      { type: 'heading_2', heading_2: { rich_text: [{ plain_text: 'What to watch' }] } },
+      { type: 'paragraph', paragraph: { rich_text: [{ plain_text: 'Retail earnings.' }] } },
+    ],
+  });
+
+  const html = renderCard(morning);
+  assert.match(html, /class="section section--payoff"/);
+  // And the ordinary section beside it is not promoted.
+  assert.match(html, /class="section">\s*<h2 class="section-label">Overnight/);
+});
