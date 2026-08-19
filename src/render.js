@@ -10,7 +10,14 @@
  * means the site works with scripting disabled and has nothing to hydrate.
  */
 
-import { escapeHtml, formatLongDate, formatShortDate, stableHash } from './util.js';
+import {
+  escapeHtml,
+  escapeText,
+  formatLongDate,
+  formatShortDate,
+  stableHash,
+  EDITIONS,
+} from './util.js';
 
 /**
  * Where the site is served from.
@@ -25,6 +32,11 @@ export const BASE = process.env.SITE_BASE ?? '/the-money-edit';
 export const ORIGIN = process.env.SITE_ORIGIN ?? 'https://aidenmark.github.io';
 
 export const SITE_NAME = 'The Money Edit';
+
+/** Sections promoted out of the run of prose, one per edition. */
+const PAYOFF_SECTIONS = new Set(['what-it-means', 'what-to-watch']);
+
+
 export const SITE_TAGLINE =
   'A daily read on markets and money, written plainly, so you can tell what it means for yours.';
 
@@ -78,14 +90,14 @@ export function layout({
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${escapeHtml(fullTitle)}</title>
-<meta name="description" content="${escapeHtml(description)}">
+<title>${escapeText(fullTitle)}</title>
+<meta name="description" content="${escapeText(description)}">
 <link rel="canonical" href="${escapeHtml(canonical)}">
 
 <meta property="og:type" content="${canonicalPath === '/' ? 'website' : 'article'}">
-<meta property="og:site_name" content="${escapeHtml(SITE_NAME)}">
-<meta property="og:title" content="${escapeHtml(title)}">
-<meta property="og:description" content="${escapeHtml(description)}">
+<meta property="og:site_name" content="${escapeText(SITE_NAME)}">
+<meta property="og:title" content="${escapeText(title)}">
+<meta property="og:description" content="${escapeText(description)}">
 <meta property="og:url" content="${escapeHtml(canonical)}">
 <meta name="twitter:card" content="summary_large_image">
 
@@ -97,7 +109,12 @@ export function layout({
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=Inter:wght@400;500;600&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
 <link rel="stylesheet" href="${url('assets/styles.css')}">
 <link rel="icon" href="${url('assets/favicon.svg')}" type="image/svg+xml">
-<link rel="alternate" type="application/rss+xml" title="${escapeHtml(SITE_NAME)}" href="${url('feed.xml')}">
+<link rel="apple-touch-icon" href="${url('assets/icon.png')}">
+<link rel="manifest" href="${url('manifest.webmanifest')}">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Money Edit">
+<link rel="alternate" type="application/rss+xml" title="${escapeText(SITE_NAME)}" href="${url('feed.xml')}">
 </head>
 <body class="${escapeHtml(`${accent.className} ${bodyClass}`.trim())}" style="--bloom-x:${accent.bloomX};--bloom-y:${accent.bloomY}">
 <a class="skip-link" href="#main">Skip to content</a>
@@ -121,7 +138,7 @@ function masthead(current) {
     `<a href="${url(href)}"${current === key ? ' aria-current="page"' : ''}>${label}</a>`;
 
   return `<header class="masthead">
-<a class="wordmark" href="${url('/')}">${escapeHtml(SITE_NAME)}</a>
+<a class="wordmark" href="${url('/')}">${escapeText(SITE_NAME)}</a>
 <nav class="masthead-nav" aria-label="Sections">
 ${link('/', 'Archive', 'archive')}
 ${link('/glossary/', 'Glossary', 'glossary')}
@@ -131,14 +148,44 @@ ${link('/glossary/', 'Glossary', 'glossary')}
 
 function footer() {
   return `<footer class="site-footer">
-<span>${escapeHtml(SITE_NAME)}</span>
+<span>${escapeText(SITE_NAME)}</span>
 <span>Written daily. Published from Notion.</span>
 </footer>`;
 }
 
-/** The path an entry is published at. Date first so the archive sorts on disk. */
+/**
+ * The path an entry is published at.
+ *
+ * Date and edition, as /2026/08/18/closing/. The headline is deliberately not
+ * in the URL.
+ *
+ * The reason is the morning notification. A static site cannot send one, so
+ * the push comes from the scheduled task, and for it to link straight to the
+ * day's card the URL has to be constructible from the date alone. A slug
+ * would require knowing the headline before it is written, which the sender
+ * does not.
+ *
+ * The brief runs twice a day, so the date alone no longer identifies an entry.
+ * The edition segment does, and both halves are known in advance, so the
+ * address is still constructible without knowing the headline. The bare date
+ * path redirects to that day's most recent edition, so /2026/08/18/ also
+ * works for anyone who trims the URL.
+ *
+ * A third entry on one date and edition would collide, so it takes a numbered
+ * suffix. That should not happen, but a URL collision is a silent way to lose
+ * a page and three lines is cheap insurance.
+ */
 export function entryPath(entry) {
-  return `/entries/${entry.date}-${entry.slug}/`;
+  const [year, month, day] = entry.date.split('-');
+  const edition = entry.edition?.key ?? EDITIONS.closing.key;
+  const suffix = entry.dateIndex > 0 ? `${entry.dateIndex + 1}/` : '';
+  return `/${year}/${month}/${day}/${edition}/${suffix}`;
+}
+
+/** The bare date path, which redirects to that day's most recent edition. */
+export function dayPath(isoDate) {
+  const [year, month, day] = isoDate.split('-');
+  return `/${year}/${month}/${day}/`;
 }
 
 /* -------------------------------------------------------------------------
@@ -155,6 +202,7 @@ export function entryPath(entry) {
  */
 export function renderCard(entry, { previous = null, next = null } = {}) {
   const accent = accentFor(entry.date);
+  const edition = entry.edition ?? EDITIONS.closing;
   let step = 0;
   const rise = () => `class="widget rise" style="--step:${step++}"`;
 
@@ -166,13 +214,26 @@ export function renderCard(entry, { previous = null, next = null } = {}) {
 
   const parts = ['<article class="entry">'];
 
+  /* The datestamp sits outside the cards, above the stack.
+   *
+   * It used to live inside the closing bell card, which meant an entry with
+   * no key figures rendered with no date anywhere on the page. That is a real
+   * defect for a daily brief, and it will happen the moment the content
+   * broadens past markets, since a car or travel entry has no index levels to
+   * report. The stamp also carries the pulse, so every entry keeps the signal
+   * that this is a dated, freshly filed thing rather than an undated article.
+   */
+  parts.push(`<p class="entry-stamp rise" style="--step:${step++}">
+<span class="bell-dot" aria-hidden="true"></span>
+<time datetime="${escapeHtml(entry.date)}">${escapeText(formatLongDate(entry.date))}</time>
+<span class="entry-edition">${escapeText(edition.label)}</span>
+</p>`);
+
+  // The figures card is the numbers, and only the numbers. When an entry
+  // reports none, the card is absent rather than empty.
   if (entry.figures.length > 0) {
     parts.push(`<section ${rise().replace('widget', 'widget widget--bell')} aria-labelledby="bell-heading">
-<p class="bell-strip">
-<span class="bell-dot" aria-hidden="true"></span>
-<span id="bell-heading">Opening bell</span>
-<time datetime="${escapeHtml(entry.date)}">${escapeHtml(formatLongDate(entry.date))}</time>
-</p>
+<p class="bell-strip" id="bell-heading">${escapeText(edition.label)}</p>
 <div class="tape">
 ${headline.map(tapeTile).join('\n')}
 </div>${
@@ -186,13 +247,15 @@ ${rest.map(restRow).join('\n')}
 </section>`);
   }
 
-  const story = [`<h1 class="entry-headline">${escapeHtml(entry.headline)}</h1>`];
+  const story = [`<h1 class="entry-headline">${escapeText(entry.headline)}</h1>`];
   for (const section of entry.sections) {
-    // "What it means for you" is the reason this project exists, so it is
-    // lifted out of the run of prose rather than being the third of three.
-    const payoff = section.key === 'what-it-means' ? ' section--payoff' : '';
+    // Each edition has one section that is the reason to read it, and that
+    // section is lifted out of the run of prose rather than sitting as just
+    // another heading. In the evening it is what the day means for your money.
+    // In the morning it is what to watch when the bell rings.
+    const payoff = PAYOFF_SECTIONS.has(section.key) ? ' section--payoff' : '';
     story.push(`<section class="section${payoff}">
-<h2 class="section-label">${escapeHtml(section.label)}</h2>
+<h2 class="section-label">${escapeText(section.label)}</h2>
 <div class="section-body">${section.html}</div>
 </section>`);
   }
@@ -203,16 +266,30 @@ ${story.join('\n')}
   if (entry.term) {
     parts.push(`<aside ${rise().replace('widget', 'widget widget--term')}>
 <p class="term-label">Term of the day</p>
-<h2 class="term-name">${escapeHtml(entry.term.term)}</h2>
-<p class="term-definition">${escapeHtml(entry.term.definition)}</p>
+<h2 class="term-name">${escapeText(entry.term.term)}</h2>
+<p class="term-definition">${escapeText(entry.term.definition)}</p>
 </aside>`);
   }
 
-  if (entry.source) {
-    parts.push(`<section ${rise()}>
-<p class="entry-source">Source: <a href="${escapeHtml(entry.source.url)}" rel="noopener noreferrer nofollow" target="_blank">${escapeHtml(
-      entry.source.title || entry.source.url
-    )}</a></p>
+  // Attribution gets its own card rather than a line of small print. This
+  // writing is a summary of other people's reporting, so who did that
+  // reporting is part of the entry, not a footnote to it. Titles are
+  // reproduced exactly as published.
+  if (entry.sources.length > 0) {
+    parts.push(`<section ${rise()} aria-labelledby="sources-heading">
+<p class="term-label" id="sources-heading">${
+      entry.sources.length === 1 ? 'Source' : 'Sources'
+    }</p>
+<ul class="source-list">
+${entry.sources
+  .map(
+    (source) => `<li><a href="${escapeHtml(source.url)}" rel="noopener noreferrer nofollow" target="_blank">
+<span class="source-title">${escapeHtml(source.title)}</span>
+<span class="source-host">${escapeHtml(hostOf(source.url))}</span>
+</a></li>`
+  )
+  .join('\n')}
+</ul>
 </section>`);
   }
 
@@ -293,6 +370,20 @@ export function splitFigure(figure) {
 }
 
 /**
+ * The publisher, derived from the URL, shown beside the article title so
+ * credit is legible at a glance without reading the whole headline.
+ */
+export function hostOf(link) {
+  try {
+    return new URL(link).hostname.replace(/^www\./, '');
+  } catch {
+    // A malformed URL should not take the page down. Showing no publisher is
+    // survivable, showing a crash is not.
+    return '';
+  }
+}
+
+/**
  * Shorten a label for the large tiles.
  *
  * The tiles are deliberately narrow, and a wrapped or truncated label undoes
@@ -306,6 +397,12 @@ export function shortenLabel(label) {
   if (/^dow jones/i.test(text)) return 'Dow';
   if (/^nasdaq composite$/i.test(text)) return 'Nasdaq';
 
+  // "S&P 500 futures" does not fit a tile. The index number is redundant once
+  // the word futures is there, since there is only one S&P futures contract
+  // anyone means, so it becomes "S&P futures".
+  const futures = /^(.+?)\s+\d+\s+futures$/i.exec(text);
+  if (futures) return `${futures[1]} futures`;
+
   // "30-year Treasury yield" reads better as "30Y Treasury" at this size.
   const treasury = /^(\d+)[\s-]*year\s+(.+?)(\s+yield)?$/i.exec(text);
   if (treasury) return `${treasury[1]}Y ${treasury[2]}`;
@@ -316,17 +413,17 @@ export function shortenLabel(label) {
 function tapeTile(figure) {
   const { level, change } = splitFigure(figure);
   return `<div class="tape-tile" data-direction="${escapeHtml(figure.direction)}">
-<span class="tape-label" title="${escapeHtml(figure.label)}">${escapeHtml(shortenLabel(figure.label))}</span>
-<span class="tape-value">${escapeHtml(level)}</span>${
-    change ? `\n<span class="tape-change">${escapeHtml(change)}</span>` : ''
+<span class="tape-label" title="${escapeText(figure.label)}">${escapeText(shortenLabel(figure.label))}</span>
+<span class="tape-value">${escapeText(level)}</span>${
+    change ? `\n<span class="tape-change">${escapeText(change)}</span>` : ''
   }
 </div>`;
 }
 
 function restRow(figure) {
   return `<div class="bell-row" data-direction="${escapeHtml(figure.direction)}">
-<span class="bell-row-label">${escapeHtml(figure.label)}</span>
-<span class="bell-row-value">${escapeHtml(figure.value)}</span>
+<span class="bell-row-label">${escapeText(figure.label)}</span>
+<span class="bell-row-value">${escapeText(figure.value)}</span>
 </div>`;
 }
 
@@ -341,7 +438,7 @@ function navLink(entry, direction) {
   const label = direction === 'previous' ? 'Previous' : 'Next';
   return `<a class="card-nav-link is-${direction}" href="${url(entryPath(entry))}">
 <span class="card-nav-direction">${label}</span>
-<span class="card-nav-title">${escapeHtml(entry.headline)}</span>
+<span class="card-nav-title">${escapeText(entry.headline)}</span>
 </a>`;
 }
 
@@ -349,12 +446,13 @@ function navLink(entry, direction) {
    Archive index
    ------------------------------------------------------------------------- */
 
-export function renderArchive(entries, { windowDays = 30 } = {}) {
+export function renderArchive(entries, { windowDays = 30, olderCount = 0 } = {}) {
   // The whole site takes its tone from the most recent entry, so the palette
   // shifts day to day rather than staying fixed.
   const accent = accentFor(entries[0]?.date);
 
-  const content = entries.length === 0 ? emptyState() : archiveList(entries, windowDays);
+  const content =
+    entries.length === 0 ? emptyState() : archiveList(entries, windowDays, olderCount);
 
   return layout({
     title: SITE_NAME,
@@ -365,24 +463,36 @@ export function renderArchive(entries, { windowDays = 30 } = {}) {
     currentNav: 'archive',
     content: `<section class="hero rise" style="--step:0">
 <h1 class="hero-title">The Money Edit</h1>
-<p class="hero-tagline">${escapeHtml(SITE_TAGLINE)}</p>
+<p class="hero-tagline">${escapeText(SITE_TAGLINE)}</p>
 </section>
 ${content}`,
   });
 }
 
-function archiveList(entries, windowDays) {
+function archiveList(entries, windowDays, olderCount = 0) {
   const rows = entries
     .map(
       (entry, index) => `<li class="archive-item rise" style="--step:${index + 1}">
 <a class="archive-link" href="${url(entryPath(entry))}">
-<span class="archive-date">${escapeHtml(formatShortDate(entry.date))}</span>
-<span class="archive-title">${escapeHtml(entry.headline)}</span>
+<span class="archive-date">${escapeText(formatShortDate(entry.date))}<span class="archive-edition">${escapeText(
+        (entry.edition ?? EDITIONS.closing).note
+      )}</span></span>
+<span class="archive-title">${escapeText(entry.headline)}</span>
 <span class="archive-arrow" aria-hidden="true">&rarr;</span>
 </a>
 </li>`
     )
     .join('\n');
+
+  // Anything past the window still exists and still has a page. Without this
+  // link the only route to it would be the previous and next chain, which is
+  // not a way anyone finds a three month old entry.
+  const more =
+    olderCount > 0
+      ? `\n<p class="archive-more rise" style="--step:${entries.length + 2}">
+<a href="${url('/archive/')}">See all ${entries.length + olderCount} entries &rarr;</a>
+</p>`
+      : '';
 
   return `<div class="archive-heading rise" style="--step:1">
 <h2>Recent entries</h2>
@@ -392,7 +502,77 @@ function archiveList(entries, windowDays) {
 </div>
 <ul class="archive-list">
 ${rows}
-</ul>`;
+</ul>${more}`;
+}
+
+/**
+ * The complete archive, every entry ever published, grouped by month.
+ *
+ * The front page deliberately shows only a window, because a landing page
+ * listing two years of entries is not a landing page. This is where the rest
+ * lives, and it is the only page that grows without bound, which is why it
+ * groups by month rather than running as one flat list.
+ */
+export function renderFullArchive(entries) {
+  const accent = accentFor(entries[0]?.date);
+
+  // Entries arrive newest first, so the month keys come out in order already.
+  const months = new Map();
+  for (const entry of entries) {
+    const key = entry.date.slice(0, 7);
+    if (!months.has(key)) months.set(key, []);
+    months.get(key).push(entry);
+  }
+
+  const sections = [...months.entries()]
+    .map(
+      ([month, group], index) => `<section class="rise" style="--step:${index + 1}">
+<div class="archive-heading">
+<h2>${escapeText(formatMonth(month))}</h2>
+<span class="archive-count">${group.length} ${group.length === 1 ? 'entry' : 'entries'}</span>
+</div>
+<ul class="archive-list">
+${group
+  .map(
+    (entry) => `<li class="archive-item">
+<a class="archive-link" href="${url(entryPath(entry))}">
+<span class="archive-date">${escapeText(formatShortDate(entry.date))}</span>
+<span class="archive-title">${escapeText(entry.headline)}</span>
+<span class="archive-arrow" aria-hidden="true">&rarr;</span>
+</a>
+</li>`
+  )
+  .join('\n')}
+</ul>
+</section>`
+    )
+    .join('\n');
+
+  return layout({
+    title: 'All entries',
+    description: `Every entry of ${SITE_NAME}, grouped by month.`,
+    canonicalPath: '/archive/',
+    accent,
+    bodyClass: 'is-archive',
+    currentNav: 'archive',
+    content: `<section class="hero rise" style="--step:0">
+<h1 class="hero-title">All entries</h1>
+<p class="hero-tagline">${entries.length} ${
+      entries.length === 1 ? 'entry' : 'entries'
+    } so far, newest first.</p>
+</section>
+${sections}`,
+  });
+}
+
+/** "2026-08" becomes "August 2026". Used as the month heading. */
+function formatMonth(yearMonth) {
+  const [year, month] = yearMonth.split('-').map(Number);
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: 'UTC',
+    month: 'long',
+    year: 'numeric',
+  }).format(new Date(Date.UTC(year, month - 1, 1)));
 }
 
 /**
@@ -432,8 +612,8 @@ export function renderGlossary(terms, { latestDate = null } = {}) {
 ${terms
   .map(
     (item, index) => `<li class="glossary-item rise" style="--step:${index + 1}">
-<h2 class="glossary-term">${escapeHtml(item.term)}</h2>
-<p class="glossary-definition">${escapeHtml(item.definition)}</p>
+<h2 class="glossary-term">${escapeText(item.term)}</h2>
+<p class="glossary-definition">${escapeText(item.definition)}</p>
 <a class="glossary-source" href="${url(entryPath(item.entry))}">Defined ${escapeHtml(
       formatLongDate(item.entry.date)
     )}</a>
@@ -456,4 +636,89 @@ ${terms
 </section>
 ${content}`,
   });
+}
+
+/**
+ * A standing redirect at /latest/ that always lands on the newest entry.
+ *
+ * This is the address the morning push notification should use. It never
+ * needs to know the date, it cannot go stale, and it survives an entry being
+ * unpublished. A meta refresh is used rather than a server rule because
+ * GitHub Pages serves static files and has no redirect layer.
+ *
+ * The canonical link points at the real entry so search engines index that
+ * rather than this, and the body carries a plain link for anyone whose
+ * browser blocks the refresh.
+ */
+export function renderLatestRedirect(entry) {
+  const target = url(entryPath(entry));
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="refresh" content="0; url=${escapeHtml(target)}">
+<link rel="canonical" href="${escapeHtml(`${ORIGIN}${target}`)}">
+<meta name="robots" content="noindex">
+<title>${escapeText(SITE_NAME)}</title>
+</head>
+<body>
+<p><a href="${escapeHtml(target)}">${escapeText(entry.headline)}</a></p>
+</body>
+</html>
+`;
+}
+
+/**
+ * The web app manifest, so adding the site to a phone home screen produces an
+ * app icon and a standalone window rather than a browser bookmark. This is
+ * most of what makes a notification feel like it opens an app.
+ */
+export function renderManifest() {
+  return JSON.stringify(
+    {
+      name: SITE_NAME,
+      short_name: 'Money Edit',
+      description: SITE_TAGLINE,
+      start_url: url('/latest/'),
+      scope: url('/'),
+      display: 'standalone',
+      background_color: '#06070A',
+      theme_color: '#06070A',
+      icons: [
+        // The SVG scales to any launcher size. The PNG is the fallback for
+        // platforms that will not accept SVG, iOS among them.
+        { src: url('assets/favicon.svg'), sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
+        { src: url('assets/icon.png'), sizes: '180x180', type: 'image/png', purpose: 'any' },
+        { src: url('assets/icon.png'), sizes: '180x180', type: 'image/png', purpose: 'maskable' },
+      ],
+    },
+    null,
+    2
+  );
+}
+
+/**
+ * A redirect at the bare date path, /2026/08/18/, landing on that day's most
+ * recent edition.
+ *
+ * Two entries a day means the date alone is ambiguous, but people trim URLs
+ * and older links may predate the edition segment. Pointing the date at the
+ * evening edition, which is the fuller one, is the sensible default.
+ */
+export function renderDayRedirect(entry) {
+  const target = url(entryPath(entry));
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="refresh" content="0; url=${escapeHtml(target)}">
+<link rel="canonical" href="${escapeHtml(`${ORIGIN}${target}`)}">
+<meta name="robots" content="noindex">
+<title>${escapeHtml(SITE_NAME)}</title>
+</head>
+<body>
+<p><a href="${escapeHtml(target)}">${escapeText(entry.headline)}</a></p>
+</body>
+</html>
+`;
 }
