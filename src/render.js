@@ -284,7 +284,7 @@ export function renderArchive(entries, { windowDays = 30 } = {}) {
     bodyClass: 'is-archive',
     currentNav: 'archive',
     content: `<section class="hero rise" style="--step:0">
-<h1 class="hero-title">The Money<br>Edit</h1>
+<h1 class="hero-title">The Money Edit</h1>
 <p class="hero-tagline">${escapeHtml(SITE_TAGLINE)}</p>
 </section>
 ${content}`,

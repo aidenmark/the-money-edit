@@ -135,3 +135,33 @@ test('parseTerm infers the term when only a definition is given', () => {
   const result = parseTerm('Term of the day. A basis point is one hundredth of a percentage point.');
   assert.equal(result.term, 'basis point');
 });
+
+test('a direction word stuck to the label moves onto the value', () => {
+  // "S&P 500 down 0.29%" used to label the tile "S&P 500 down" with a value
+  // of "0.29%". The direction never reached the value, so the tile showed no
+  // arrow and no tint and the reader lost the fact that it fell.
+  assert.deepEqual(parseFigure('S&P 500 down 0.29%'), {
+    label: 'S&P 500',
+    value: '0.29%',
+    direction: 'down',
+  });
+
+  assert.deepEqual(parseFigure('Broadcom down 6%'), {
+    label: 'Broadcom',
+    value: '6%',
+    direction: 'down',
+  });
+
+  assert.deepEqual(parseFigure('Gold up 1.2%'), {
+    label: 'Gold',
+    value: '1.2%',
+    direction: 'up',
+  });
+});
+
+test('a label that legitimately ends in a qualifier still keeps its value', () => {
+  const figure = parseFigure('10-year Treasury about 4.72%');
+  assert.equal(figure.label, '10-year Treasury');
+  assert.equal(figure.value, 'about 4.72%');
+  assert.equal(figure.direction, 'flat');
+});
