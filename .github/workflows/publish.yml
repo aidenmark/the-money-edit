@@ -13,22 +13,45 @@
 name: Publish
 
 on:
-  # The entry is filed at 9:30am Eastern and, now that the task publishes
-  # directly rather than filing a draft, this build is the only thing standing
-  # between it being written and it being readable. So the first build runs at
-  # 9:45 Eastern, fifteen minutes behind the entry.
+  # The entry is filed at 9:30am Eastern and the task publishes it directly,
+  # so this build is the only thing between an entry being written and being
+  # readable. The notification goes out at 9:30, which means anything later
+  # than a few minutes leaves a reader tapping through to yesterday's card.
   #
-  # Cron in Actions is always UTC and does not follow daylight saving, so
-  # 9:45 Eastern is two different UTC times across the year. Both are listed.
-  # In summer 13:45 UTC is the 9:45 run and 14:45 is a harmless second pass.
-  # In winter it is the other way round. Two cheap builds beats a DST bug that
-  # would surface twice a year and be maddening to diagnose.
+  # Cron in Actions is always UTC and does not follow daylight saving, so each
+  # Eastern time is two UTC times across the year. Both are listed, and one of
+  # each pair is a harmless no change rebuild depending on the season. Builds
+  # are free, a daylight saving bug that surfaces twice a year is not.
   #
-  # The evening run catches an entry edited later in the day.
+  # 13:35 and 14:35 UTC are 9:35 Eastern. 13:50 and 14:50 are the retry, since
+  # GitHub does not guarantee cron punctuality and delays of ten minutes or
+  # more happen under load. 22:00 catches an entry edited later in the day.
+  #
+  # For a build that actually lands at 9:31 rather than 9:35 at best, see the
+  # repository_dispatch trigger below. Cron is the fallback, not the plan.
   schedule:
-    - cron: '45 13 * * 1-5'
-    - cron: '45 14 * * 1-5'
+    - cron: '35 13 * * 1-5'
+    - cron: '50 13 * * 1-5'
+    - cron: '35 14 * * 1-5'
+    - cron: '50 14 * * 1-5'
     - cron: '0 22 * * 1-5'
+
+  # Publish on demand from outside GitHub. This is how the scheduled task can
+  # rebuild the site the moment it finishes writing an entry, instead of the
+  # site waiting for the next cron.
+  #
+  # The task fires it with a fine grained token holding only Contents write on
+  # this repository:
+  #
+  #   curl -X POST \
+  #     -H "Authorization: Bearer $TOKEN" \
+  #     -H "Accept: application/vnd.github+json" \
+  #     https://api.github.com/repos/aidenmark/the-money-edit/dispatches \
+  #     -d '{"event_type":"entry-published"}'
+  #
+  # Until that is wired up the crons cover it, just less promptly.
+  repository_dispatch:
+    types: [entry-published]
 
   # Republish whenever the site code itself changes.
   push:
