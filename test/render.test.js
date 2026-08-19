@@ -314,3 +314,29 @@ test('hostOf strips www and survives a malformed url', () => {
   assert.equal(hostOf('https://www.stl.news/some/path'), 'stl.news');
   assert.equal(hostOf('not a url'), '');
 });
+
+test('every entry carries its date, with or without figures', () => {
+  // The datestamp used to live inside the opening bell card, so an entry with
+  // no key figures rendered with no date anywhere. That will happen as soon as
+  // the content broadens past markets.
+  const bare = parseEntry({
+    id: 'bare',
+    headline: 'Mercedes reveals the electric G-Class',
+    summary: 'No market figures in this one.',
+    date: '2026-08-20',
+    status: 'Published',
+    blocks: [],
+  });
+
+  for (const [label, html] of [
+    ['with figures', renderCard(withFigures)],
+    ['without figures', renderCard(bare)],
+  ]) {
+    assert.match(html, /class="entry-stamp/, `${label}: no datestamp`);
+    assert.match(html, /<time datetime="\d{4}-\d{2}-\d{2}">/, `${label}: no machine readable date`);
+  }
+
+  // The bell card itself is still conditional. It is the numbers, and an
+  // entry with no numbers should not render an empty one.
+  assert.ok(!renderCard(bare).includes('widget--bell'));
+});

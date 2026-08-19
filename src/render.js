@@ -187,13 +187,25 @@ export function renderCard(entry, { previous = null, next = null } = {}) {
 
   const parts = ['<article class="entry">'];
 
+  /* The datestamp sits outside the cards, above the stack.
+   *
+   * It used to live inside the opening bell card, which meant an entry with
+   * no key figures rendered with no date anywhere on the page. That is a real
+   * defect for a daily brief, and it will happen the moment the content
+   * broadens past markets, since a car or travel entry has no index levels to
+   * report. The stamp also carries the pulse, so every entry keeps the signal
+   * that this is a dated, freshly filed thing rather than an undated article.
+   */
+  parts.push(`<p class="entry-stamp rise" style="--step:${step++}">
+<span class="bell-dot" aria-hidden="true"></span>
+<time datetime="${escapeHtml(entry.date)}">${escapeText(formatLongDate(entry.date))}</time>
+</p>`);
+
+  // The opening bell card is the numbers, and only the numbers. When an entry
+  // reports none, the card is absent rather than empty.
   if (entry.figures.length > 0) {
     parts.push(`<section ${rise().replace('widget', 'widget widget--bell')} aria-labelledby="bell-heading">
-<p class="bell-strip">
-<span class="bell-dot" aria-hidden="true"></span>
-<span id="bell-heading">Opening bell</span>
-<time datetime="${escapeHtml(entry.date)}">${escapeText(formatLongDate(entry.date))}</time>
-</p>
+<p class="bell-strip" id="bell-heading">Opening bell</p>
 <div class="tape">
 ${headline.map(tapeTile).join('\n')}
 </div>${
