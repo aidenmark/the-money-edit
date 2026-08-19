@@ -316,7 +316,7 @@ test('hostOf strips www and survives a malformed url', () => {
 });
 
 test('every entry carries its date, with or without figures', () => {
-  // The datestamp used to live inside the opening bell card, so an entry with
+  // The datestamp used to live inside the closing bell card, so an entry with
   // no key figures rendered with no date anywhere. That will happen as soon as
   // the content broadens past markets.
   const bare = parseEntry({
