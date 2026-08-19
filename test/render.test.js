@@ -20,6 +20,8 @@ import {
   entryPath,
   splitFigure,
   shortenLabel,
+  renderLatestRedirect,
+  renderManifest,
 } from '../src/render.js';
 
 /** Match how the renderer escapes text, so assertions compare like with like. */
@@ -164,11 +166,47 @@ test('the accent is stable for a date and differs between dates', () => {
   assert.match(accentFor('2026-08-18').className, /^accent-[0-7]$/);
 });
 
-test('entry paths are date first so they sort chronologically', () => {
-  assert.equal(
-    entryPath({ date: '2026-08-18', slug: 'bond-yields' }),
-    '/entries/2026-08-18-bond-yields/'
-  );
+test('entry paths are built from the date alone', () => {
+  // The morning push notification has to construct this URL knowing only the
+  // date. A slug would require knowing the headline before it is written.
+  assert.equal(entryPath({ date: '2026-08-18', dateIndex: 0 }), '/2026/08/18/');
+});
+
+test('a second entry on the same day is suffixed, the first stays clean', () => {
+  // Two entries already share 2026-08-14 in the database. The first must keep
+  // the predictable path so the notification link stays correct.
+  assert.equal(entryPath({ date: '2026-08-14', dateIndex: 0 }), '/2026/08/14/');
+  assert.equal(entryPath({ date: '2026-08-14', dateIndex: 1 }), '/2026/08/14/2/');
+});
+
+test('the latest redirect points at the newest entry and is not indexed', () => {
+  const html = renderLatestRedirect({
+    date: '2026-08-18',
+    dateIndex: 0,
+    headline: 'Bond yields hit a 2007 high',
+  });
+
+  assert.match(html, /http-equiv="refresh" content="0; url=[^"]*\/2026\/08\/18\//);
+  assert.match(html, /name="robots" content="noindex"/);
+  // A plain link has to survive for anyone whose browser blocks the refresh.
+  assert.match(html, /<a href="[^"]*\/2026\/08\/18\/">/);
+});
+
+test('the manifest opens on the latest entry in standalone mode', () => {
+  const manifest = JSON.parse(renderManifest());
+
+  assert.match(manifest.start_url, /\/latest\/$/);
+  assert.equal(manifest.display, 'standalone');
+  assert.equal(manifest.theme_color, '#06070A');
+  // Every icon the manifest names has to be a file the build actually writes.
+  // The first version referenced assets/icon.svg, which was never generated.
+  const written = new Set(['favicon.svg', 'icon.png']);
+  for (const icon of manifest.icons) {
+    assert.ok(
+      written.has(icon.src.split('/').pop()),
+      `manifest references ${icon.src}, which the build does not write`
+    );
+  }
 });
 
 test('the summary is not printed on the card when the body already contains it', () => {
