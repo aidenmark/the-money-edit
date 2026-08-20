@@ -122,10 +122,12 @@ export function selectPublishable(entries, today) {
  * edition sorts ahead of the morning one, so "newest first" stays true in the
  * archive, in the previous and next chain, and in what /latest/ points at.
  *
- * A same date and same edition collision should never happen, but if it does
- * the fuller entry takes the clean URL rather than whichever Notion returned
- * first. The id is the final tiebreak purely so the ordering is total and a
- * rebuild can never produce different URLs from the same data.
+ * A same date and same edition collision is not hypothetical. It happened on
+ * 2026-08-19, when the redundant Closing Bell firing failed its duplicate
+ * check and filed a second entry. This comparator decides which of the two the
+ * slot keeps: the fuller entry wins, and the id is the final tiebreak purely so
+ * the ordering is total and a rebuild can never produce different URLs from the
+ * same data. collapseSlots then drops the rest.
  */
 export function byDateThenEdition(a, b) {
   if (a.date !== b.date) return b.date.localeCompare(a.date);
@@ -135,8 +137,8 @@ export function byDateThenEdition(a, b) {
   const bEvening = b.edition?.key === 'closing' ? 0 : 1;
   if (aEvening !== bEvening) return aEvening - bEvening;
 
-  // Same date and same edition should not happen. If it does, the entry with
-  // more to it wins the clean URL rather than whichever Notion returned first.
+  // Same date and same edition. The entry with more to it wins the slot,
+  // rather than whichever Notion happened to return first.
   const blocks = (b.blocks?.length ?? 0) - (a.blocks?.length ?? 0);
   if (blocks !== 0) return blocks;
 
@@ -168,6 +170,43 @@ export function assignSlugs(entries) {
     entry.slug = slugify(entry.headline) || 'entry';
   }
   return entries;
+}
+
+/**
+ * Keep one entry per date and edition, and report the ones dropped.
+ *
+ * Each day has exactly two slots, an Opening Bell and a Closing Bell, and the
+ * site should hold exactly one entry in each. Enforcing that here rather than
+ * upstream is deliberate.
+ *
+ * The upstream guard is a duplicate check written into the scheduled task
+ * prompt, which a model re-derives on every firing. On 2026-08-19 it worked at
+ * 10:13am and failed at 6:16pm, filing a second Closing Bell for a date that
+ * already had one. A prompt cannot be relied on for a correctness property,
+ * and the whole two cron daylight saving scheme leans on that check to kill the
+ * redundant firing. So the build treats extra entries in a slot as expected
+ * input and resolves them the same way every time.
+ *
+ * Entries must already be sorted by byDateThenEdition, which decides the
+ * winner. Dropped entries stay Published in Notion and are returned rather than
+ * discarded quietly, so the build can say out loud that a duplicate arrived.
+ */
+export function collapseSlots(entries) {
+  const taken = new Set();
+  const kept = [];
+  const dropped = [];
+
+  for (const entry of entries) {
+    const slot = `${entry.date}/${entry.edition?.key ?? 'closing'}`;
+    if (taken.has(slot)) {
+      dropped.push(entry);
+      continue;
+    }
+    taken.add(slot);
+    kept.push(entry);
+  }
+
+  return { kept, dropped };
 }
 
 /**
@@ -396,15 +435,29 @@ async function main() {
   const today = todayInNewYork();
 
   const all = await loadEntries();
-  const published = assignSlugs(
+
+  // Collapse before parsing, so a duplicate costs nothing to discard.
+  const { kept, dropped } = collapseSlots(
     selectPublishable(all, today)
       .map((entry) => ({ ...entry, edition: resolveEdition(entry) }))
       .sort(byDateThenEdition)
-  ).map(parseEntry);
+  );
+  const published = assignSlugs(kept).map(parseEntry);
 
   console.log(
     `${published.length} of ${all.length} entries are published and dated on or before ${today}.`
   );
+
+  // Loud, because a duplicate means an upstream guard failed and the losing
+  // entry is still sitting in Notion as Published, looking fine.
+  for (const entry of dropped) {
+    const slot = `${entry.date} ${entry.edition?.name ?? 'Closing Bell'}`;
+    console.warn(
+      `Warning: ${slot} had more than one published entry. Kept the fuller one ` +
+        `and dropped "${entry.headline ?? entry.title ?? entry.id}". ` +
+        `Set the loser to Draft in Notion to make the choice explicit.`
+    );
+  }
 
   // A clean output directory guarantees that an entry unpublished in Notion
   // actually disappears from the site rather than lingering as a stale file.
