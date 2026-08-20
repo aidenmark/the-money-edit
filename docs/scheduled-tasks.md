@@ -202,7 +202,15 @@ not in a cited source. Explain in your own words rather than reshaping the
 source's sentences.
 
 WHEN DONE
-Send a push notification with the headline and this link on its own line:
+Send a push notification. The notification is the edition, so put the headline
+first and then the summary, and write it to be worth reading on a lock screen
+without tapping anything.
+
+End with this link on its own line, described as the archive copy rather than
+as something already waiting. The site rebuilds on a schedule and usually
+trails this notification by fifteen to forty minutes, so do not tell me the
+card is live.
+
 https://aidenmark.github.io/the-money-edit/latest/
 ```
 
@@ -327,76 +335,82 @@ not in a cited source. Explain in your own words rather than reshaping the
 source's sentences.
 
 WHEN DONE
-Send a push notification with the headline and this link on its own line:
+Send a push notification. The notification is the edition, so put the headline
+first and then the summary, and write it to be worth reading on a lock screen
+without tapping anything.
+
+End with this link on its own line, described as the archive copy rather than
+as something already waiting. The site rebuilds on a schedule and usually
+trails this notification by fifteen to forty minutes, so do not tell me the
+card is live.
+
 https://aidenmark.github.io/the-money-edit/latest/
 ```
 
 ---
 
-## Rebuild trigger, required for the card to match the notification
+## Rebuild trigger, attempted and abandoned
 
-Each prompt ends by pushing a notification whose link points at `/latest/`. That
-link is only honest if the site has already rebuilt. It rebuilds on a cron, and
-GitHub does not guarantee cron punctuality.
+**Do not add a GitHub token to these prompts. It cannot work.**
 
-On 2026-08-19, the first day both editions ran live, every scheduled run started
-between 29 and 42 minutes behind its cron time:
-
-| Cron (UTC) | Actually started | Late by |
-|---|---|---|
-| 13:10 | 13:52 | 42 min |
-| 13:20 | 13:59 | 39 min |
-| 14:10 | 14:51 | 41 min |
-| 14:20 | 14:56 | 36 min |
-| 14:35 | 15:04 | 29 min |
-| 15:00 | 15:31 | 31 min |
-
-The Opening Bell entry was filed at 13:22 UTC and the notification went out
-immediately. The card did not deploy until 13:53. For 31 minutes the push said
-the edition was published and `/latest/` still showed the previous evening's
-Closing Bell.
-
-Thirty minutes of a notification pointing at stale content is not an acceptable
-default, so the trigger below is part of the setup rather than an enhancement.
-It fires a `repository_dispatch` that the publish workflow listens for, and the
-run starts within seconds.
-
-### What it needs
-
-A GitHub fine grained personal access token with **Contents: write** on
-`aidenmark/the-money-edit` and nothing else, with an expiry set.
-
-**Never paste this token into a chat.** It would sit in the transcript
-permanently. Create it at github.com/settings/personal-access-tokens and paste
-it straight into the task prompt in claude.ai yourself.
-
-Add this to the end of **all four** prompts, not just the two that fire in the
-current season. In the other half of the year the redundant firing of each pair
-becomes the real one, and a trigger present on only one of the pair would
-silently stop working at the daylight saving boundary. The redundant firings
-stop at the duplicate check long before reaching this line, so there is no risk
-of triggering twice.
+Scheduled cloud sessions on claude.ai are blocked from reaching the GitHub API.
+A proxy in the run environment intercepts calls to `api.github.com`, and a
+`repository_dispatch` POST comes back with:
 
 ```
-After filing the entry, trigger the site rebuild:
-
-curl -X POST -H "Authorization: Bearer YOUR_TOKEN_HERE" -H "Accept: application/vnd.github+json" https://api.github.com/repos/aidenmark/the-money-edit/dispatches -d '{"event_type":"entry-published"}'
+403  repository_dispatch is not permitted for this session type
 ```
 
-The curl is deliberately on one line. The multi line form with trailing
-backslashes is easy to mangle when pasting into a web textarea, and a broken
-line here fails silently.
+This is a platform restriction, not a scope problem. A correctly scoped fine
+grained token with Contents write fails exactly the same way, so the only thing
+adding one achieves is putting a live credential in plaintext inside four
+stored prompts. This was tried on 2026-08-19 and both Closing Bell firings
+reported the 403.
 
-### The tradeoff, stated plainly
+The `repository_dispatch` trigger stays wired up in the publish workflow,
+because it works fine from anywhere with real network access. It just cannot be
+fired from the task that writes the entry.
 
-The token lives in plaintext inside four stored prompts. Scoped to one
-repository with Contents write and nothing else, the worst case is someone
-committing to this repo, which is recoverable and not catastrophic. That is the
-price of the card being live when the notification arrives.
+### The lag this leaves, measured
 
-When the token expires the curl starts failing silently and the site falls back
-to the cron path, roughly half an hour behind. Nothing breaks, it just gets slow
-again, so put the expiry date on a calendar.
+Every scheduled build across the first two days both editions ran live:
+
+| Window | Cron (UTC) | Started | Late by |
+|---|---|---|---|
+| morning | 13:10 | 13:52 | 42 min |
+| morning | 13:20 | 13:59 | 39 min |
+| morning | 14:10 | 14:51 | 41 min |
+| morning | 14:20 | 14:56 | 36 min |
+| morning | 14:35 | 15:04 | 29 min |
+| morning | 15:00 | 15:31 | 31 min |
+| evening | 21:30 | 21:51 | 21 min |
+| evening | 21:45 | 21:59 | 14 min |
+| evening | 22:30 | 22:50 | 20 min |
+| evening | 22:45 | 23:01 | 16 min |
+
+### Why adding more crons does not help
+
+The obvious response is to schedule builds more densely and take whichever
+lands first. The data says no. The 13:10 and 13:20 crons were ten minutes apart
+and started seven minutes apart, both about forty minutes late. The delay hits
+the whole window rather than each run independently, so a cron inserted at 13:15
+would have come out around 13:55 with the rest of them.
+
+It also explains why mornings are twice as bad as evenings. 13:00 to 15:00 UTC
+is peak load on GitHub's shared runners.
+
+### What was done instead
+
+The notification was rewritten so it stops making a claim that is false for the
+next half hour. The push carries the headline and the summary, which is the
+edition itself and the part worth reading on a lock screen, and the link is
+offered as the archive copy rather than as a page already waiting. Nothing about
+the pipeline changed, only the promise it makes.
+
+If the lag becomes genuinely annoying, the real fix is to move the trigger to
+something that can reach the repository, such as a scheduled agent running with
+repository access, firing twenty minutes after each edition. That is a second
+scheduler to own, so it is worth living with the lag for a while first.
 
 ---
 
