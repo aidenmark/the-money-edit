@@ -388,29 +388,61 @@ Every scheduled build across the first two days both editions ran live:
 | evening | 22:30 | 22:50 | 20 min |
 | evening | 22:45 | 23:01 | 16 min |
 
-### Why adding more crons does not help
+### Why aiming a cron at a moment does not work
 
-The obvious response is to schedule builds more densely and take whichever
-lands first. The data says no. The 13:10 and 13:20 crons were ten minutes apart
-and started seven minutes apart, both about forty minutes late. The delay hits
-the whole window rather than each run independently, so a cron inserted at 13:15
-would have come out around 13:55 with the rest of them.
+The obvious response is to point a cron just after each publish time. That is
+what this repository did for three days and it failed every morning.
+
+The 13:10 and 13:20 crons were ten minutes apart and started seven minutes
+apart, both about forty minutes late. The delay hits the whole window at once
+rather than each run independently, so a cron aimed at 13:10 to catch a 13:05
+entry simply produces a build at 13:52. Adding another cron at 13:15 produces
+one at 13:55.
 
 It also explains why mornings are twice as bad as evenings. 13:00 to 15:00 UTC
 is peak load on GitHub's shared runners.
 
-### What was done instead
+### What does work: cover the window instead of aiming at it
 
-The notification was rewritten so it stops making a claim that is false for the
-next half hour. The push carries the headline and the summary, which is the
-edition itself and the part worth reading on a lock screen, and the link is
-offered as the archive copy rather than as a page already waiting. Nothing about
-the pipeline changed, only the promise it makes.
+A uniform delay destroys timing but preserves **spacing**. Runs scheduled ten
+minutes apart execute ten minutes apart, wherever the queue puts them. So the
+workflow now schedules every ten minutes across two windows wide enough to hold
+both daylight saving offsets:
 
-If the lag becomes genuinely annoying, the real fix is to move the trigger to
-something that can reach the repository, such as a scheduled agent running with
-repository access, firing twenty minutes after each edition. That is a second
-scheduler to own, so it is worth living with the lag for a while first.
+```
+*/10 12-15 * * 1-5     morning, covers 9:05 to 10:25am Eastern year round
+*/10 20-23 * * 1-5     evening, covers 5:16 to 6:40pm Eastern year round
+```
+
+The windows open an hour before the earliest possible entry, so execution is
+already underway by the time one appears even at the worst delay seen.
+
+The guarantee changes shape. It is no longer "a build at 9:10am", which was
+never true. It is "a build within about ten minutes of whenever the entry
+lands", which holds regardless of how far behind the queue is running.
+
+Replayed against the five editions published so far, using the delay each day
+actually had:
+
+| Edition | Entry | Delay that day | Site live |
+|---|---|---|---|
+| Wed opening | 13:22 | 42 min | 13:22 |
+| Wed closing | 21:19 | 21 min | 21:21 |
+| Thu opening | 13:42 | 44 min | 13:44 |
+| Thu closing | 22:03 | 18 min | 22:08 |
+| Fri opening | 13:10 | 40 min | 13:10 |
+
+Nought to five minutes, against the thirty one to forty minutes those mornings
+actually saw.
+
+This is polling, and it is polling because push is unavailable. Forty eight
+builds a weekday, six an hour, under the ten per hour Pages guidance. Each is
+about thirty seconds and Actions minutes are free on a public repository. When
+nothing has changed the build simply republishes identical output.
+
+A side effect worth having: both seasons now fall inside one expression per
+edition, so the season specific cron pairs this file used to carry are gone,
+and with them a twice yearly opportunity to get the offset wrong.
 
 ---
 
