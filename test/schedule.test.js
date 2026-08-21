@@ -1,16 +1,26 @@
 /**
- * Schedule alignment tests.
+ * Schedule coverage tests.
  *
- * The publish crons in .github/workflows/publish.yml have to fire shortly
- * after the scheduled tasks write an entry, in both halves of the year. That
- * relationship is easy to break, because the two schedules live in different
- * systems: the tasks are configured in claude.ai and the builds are in this
- * repository. Nothing else would catch a drift, and the symptom would be a
- * card that silently lags its notification for five months.
+ * The publish crons in .github/workflows/publish.yml have to produce a build
+ * shortly after the scheduled tasks in claude.ai write an entry. That
+ * relationship is easy to break, because the two halves live in different
+ * systems and nothing else would catch a drift. The symptom would be a card
+ * that silently lags its notification, possibly for five months.
  *
- * Cron in GitHub Actions is always UTC and does not follow daylight saving, so
- * every Eastern time appears twice and each entry time is tested in both
- * seasons.
+ * These tests used to assert that a named cron sat within twenty minutes of a
+ * named entry time. Three days of live operation showed why that was the wrong
+ * property. Every run started 29 to 44 minutes behind its cron in the morning,
+ * and two crons ten minutes apart started seven minutes apart, so the delay is
+ * a queue that swallows the whole window rather than jitter on each run. A
+ * cron cannot be aimed. The old tests passed the entire time the site was
+ * lagging by half an hour, which is the clearest possible sign they were
+ * measuring the wrong thing.
+ *
+ * What survives a uniform delay is spacing. So these tests assert coverage
+ * instead of punctuality: builds are scheduled closely enough together, across
+ * a window wide enough to hold both daylight saving offsets, that an entry
+ * appearing anywhere in it is picked up promptly no matter how far behind the
+ * queue is running.
  */
 
 import { test } from 'node:test';
@@ -19,105 +29,167 @@ import { readFileSync } from 'node:fs';
 
 const workflow = readFileSync(new URL('../.github/workflows/publish.yml', import.meta.url), 'utf8');
 
-/** Every publish cron, as minutes past midnight UTC. */
-const buildTimes = [...workflow.matchAll(/cron: '(\d+) (\d+) /g)]
-  .map(([, minute, hour]) => Number(hour) * 60 + Number(minute))
-  .sort((a, b) => a - b);
+/**
+ * Expand a cron minute and hour field into every minute past midnight UTC it
+ * fires at. Only the syntax this workflow actually uses is supported, which is
+ * a step over a range and a plain number. Anything else throws rather than
+ * being silently skipped, because a cron this file cannot read is a cron these
+ * tests are not checking.
+ */
+function expandField(field, max) {
+  if (/^\d+$/.test(field)) return [Number(field)];
+
+  const step = field.match(/^\*\/(\d+)$/);
+  if (step) {
+    const size = Number(step[1]);
+    return Array.from({ length: Math.ceil((max + 1) / size) }, (_, i) => i * size);
+  }
+
+  const range = field.match(/^(\d+)-(\d+)$/);
+  if (range) {
+    const [, from, to] = range.map(Number);
+    return Array.from({ length: to - from + 1 }, (_, i) => from + i);
+  }
+
+  throw new Error(`unsupported cron field "${field}"`);
+}
+
+/** Every minute past midnight UTC at which a build is scheduled. */
+const buildTimes = [
+  ...new Set(
+    [...workflow.matchAll(/cron: '(\S+) (\S+) /g)].flatMap(([, minuteField, hourField]) =>
+      expandField(hourField, 23).flatMap((hour) =>
+        expandField(minuteField, 59).map((minute) => hour * 60 + minute)
+      )
+    )
+  ),
+].sort((a, b) => a - b);
 
 /**
- * When each edition is written, in UTC. Mirrors docs/scheduled-tasks.md.
- * The task fires on two crons and a guard in the prompt lets exactly one
- * through, which is what holds the Eastern time fixed across the year.
+ * When an entry can appear, in UTC.
+ *
+ * These are ranges rather than points, which is the other thing three days of
+ * operation taught. The claude.ai scheduler is not punctual either, the 9:00am
+ * task has started as late as 9:22 and been skipped entirely twice, and when it
+ * is skipped the 10:00am backup writes instead. So the earliest an entry can
+ * land is a fast manual run and the latest is the backup task finishing.
+ *
+ * Eastern times are converted at both offsets, because a window that only
+ * holds one season is the twice yearly bug this file exists to prevent.
  */
-const ENTRY_TIMES = [
-  { edition: 'Opening Bell', season: 'summer', utc: 13 * 60 + 0, offset: 4 },
-  { edition: 'Opening Bell', season: 'winter', utc: 14 * 60 + 0, offset: 5 },
-  { edition: 'Closing Bell', season: 'summer', utc: 21 * 60 + 15, offset: 4 },
-  { edition: 'Closing Bell', season: 'winter', utc: 22 * 60 + 15, offset: 5 },
+const EASTERN_WINDOWS = [
+  { edition: 'Opening Bell', fromEastern: 9 * 60 + 5, toEastern: 10 * 60 + 25 },
+  { edition: 'Closing Bell', fromEastern: 17 * 60 + 16, toEastern: 18 * 60 + 40 },
 ];
 
-/** The first build that runs after a given moment. */
-const nextBuildAfter = (utcMinutes) => buildTimes.find((time) => time > utcMinutes);
+const OFFSETS = [
+  { season: 'summer', hours: 4 },
+  { season: 'winter', hours: 5 },
+];
 
-test('the workflow lists ten publish crons', () => {
-  // Four morning, two late morning catches, four evening.
-  assert.equal(buildTimes.length, 10);
-});
+/** Every entry window in UTC, both editions in both seasons. */
+const ENTRY_WINDOWS = EASTERN_WINDOWS.flatMap(({ edition, fromEastern, toEastern }) =>
+  OFFSETS.map(({ season, hours }) => ({
+    edition,
+    season,
+    from: fromEastern + hours * 60,
+    to: toEastern + hours * 60,
+  }))
+);
 
-test('no entry can wait more than an hour for a build, in either season', () => {
-  // A research run that overruns must not strand the card. The winter morning
-  // used to fall through to the 4:30pm evening pass, a seven hour gap, because
-  // the next cron after 14:20 UTC was 21:30.
-  for (const { edition, season, utc } of ENTRY_TIMES) {
-    const covering = buildTimes.filter((t) => t > utc && t <= utc + 120);
+/** The worst cron delay seen in production, used as the safety margin. */
+const OBSERVED_MAX_LAG = 45;
+
+/** How long an entry may wait for the next build, ignoring queue delay. */
+const MAX_SPACING = 10;
+
+test('every entry window is covered by builds spaced ten minutes apart', () => {
+  // This is the property that actually holds under a delayed queue. If builds
+  // are scheduled every ten minutes then they execute every ten minutes, so an
+  // entry landing anywhere in the window waits at most ten minutes plus
+  // whatever constant the queue is adding to everything.
+  for (const { edition, season, from, to } of ENTRY_WINDOWS) {
+    const inWindow = buildTimes.filter((t) => t >= from && t <= to + MAX_SPACING);
+
     assert.ok(
-      covering.length >= 2,
-      `${edition} in ${season} has only ${covering.length} build(s) in the two hours after it`
+      inWindow.length > 0,
+      `${edition} in ${season} has no builds scheduled in its entry window`
     );
 
-    // And no gap larger than an hour inside that window.
-    const points = [utc, ...covering];
+    const points = [from, ...inWindow];
     for (let i = 1; i < points.length; i += 1) {
+      const gap = points[i] - points[i - 1];
       assert.ok(
-        points[i] - points[i - 1] <= 60,
-        `${edition} in ${season} has a ${points[i] - points[i - 1]} minute gap in build coverage`
+        gap <= MAX_SPACING,
+        `${edition} in ${season} has a ${gap} minute gap in build coverage`
       );
+    }
+
+    const last = points[points.length - 1];
+    assert.ok(
+      last >= to,
+      `${edition} in ${season} stops being covered at ${last}, before its window ends at ${to}`
+    );
+  }
+});
+
+test('coverage begins early enough to absorb the worst observed delay', () => {
+  // A window that starts exactly when entries can start would, at a 44 minute
+  // queue delay, produce its first execution 44 minutes after the first
+  // possible entry. Starting an hour early means execution is already underway.
+  for (const { edition, season, from } of ENTRY_WINDOWS) {
+    const first = buildTimes.find((t) => t >= from - 120);
+    assert.ok(first !== undefined, `${edition} in ${season} has no build scheduled before it`);
+    assert.ok(
+      first <= from - OBSERVED_MAX_LAG,
+      `${edition} in ${season} starts building at ${first}, only ${
+        from - first
+      } minutes before an entry can appear, which is less than the ${OBSERVED_MAX_LAG} minute worst case delay`
+    );
+  }
+});
+
+test('one expression covers both seasons, so nothing has to change twice a year', () => {
+  // The workflow used to carry a season specific pair for each edition. The
+  // windows are now wide enough that summer and winter fall inside the same
+  // expression, which is the point.
+  const crons = [...workflow.matchAll(/cron: '([^']+)'/g)].map(([, cron]) => cron);
+  assert.equal(crons.length, 2, `expected two cron expressions, found ${crons.length}`);
+
+  for (const { edition, from, to } of ENTRY_WINDOWS) {
+    assert.ok(
+      buildTimes.some((t) => t >= from && t <= to + MAX_SPACING),
+      `${edition} falls outside every cron expression in one of the two seasons`
+    );
+  }
+});
+
+test('the build load stays under the Pages limit of ten deploys an hour', () => {
+  // Polling is only acceptable while it stays polite. Six an hour leaves room.
+  for (let hour = 0; hour < 24; hour += 1) {
+    const inHour = buildTimes.filter((t) => Math.floor(t / 60) === hour).length;
+    assert.ok(inHour <= 6, `${inHour} builds scheduled in the ${hour}:00 UTC hour`);
+  }
+});
+
+test('both editions deliver at the same Eastern time year round', () => {
+  // The whole reason the tasks run on two firings with a guard. This is about
+  // the upstream schedule rather than the build, but if it ever stops being
+  // true the windows above are aimed at the wrong hours.
+  for (const { edition, fromEastern, toEastern } of EASTERN_WINDOWS) {
+    const windows = ENTRY_WINDOWS.filter((w) => w.edition === edition);
+    for (const { season, from, to, } of windows) {
+      const offset = OFFSETS.find((o) => o.season === season).hours * 60;
+      assert.equal(from - offset, fromEastern, `${edition} in ${season} starts at a different Eastern time`);
+      assert.equal(to - offset, toEastern, `${edition} in ${season} ends at a different Eastern time`);
     }
   }
 });
 
-for (const { edition, season, utc, offset } of ENTRY_TIMES) {
-  test(`${edition} in ${season} is followed by a build within 20 minutes`, () => {
-    const build = nextBuildAfter(utc);
-    assert.ok(build !== undefined, 'no build runs after this entry is written');
-
-    const lag = build - utc;
-    assert.ok(lag > 0, 'the build must run after the entry, not before');
-    assert.ok(
-      lag <= 20,
-      `${lag} minutes between the entry and the build, which is too long a lag`
-    );
-  });
-}
-
-test('the morning card is live before the 9:30am opening bell, in both seasons', () => {
-  // This is the one hard deadline. The Opening Bell edition is worthless if it
-  // publishes after the market it was written to prepare for.
-  for (const entry of ENTRY_TIMES.filter((e) => e.edition === 'Opening Bell')) {
-    const build = nextBuildAfter(entry.utc);
-    const easternMinutes = build - entry.offset * 60;
-    assert.ok(
-      easternMinutes < 9 * 60 + 30,
-      `${entry.season}: build lands at ${Math.floor(easternMinutes / 60)}:${String(
-        easternMinutes % 60
-      ).padStart(2, '0')} Eastern, after the bell`
-    );
-  }
-});
-
-test('the evening card is never built before the close plus an hour', () => {
-  // The journalism explaining a session publishes between 4:15 and 5:30pm, so
-  // an entry written earlier than that would lack its sources.
-  for (const entry of ENTRY_TIMES.filter((e) => e.edition === 'Closing Bell')) {
-    const easternMinutes = entry.utc - entry.offset * 60;
-    assert.ok(
-      easternMinutes >= 17 * 60,
-      `${entry.season}: entry written at ${Math.floor(easternMinutes / 60)}:${String(
-        easternMinutes % 60
-      ).padStart(2, '0')} Eastern, before the explainers publish`
-    );
-  }
-});
-
-test('both seasons deliver at the same Eastern time', () => {
-  // The whole point of running each edition on two crons with a guard. If the
-  // summer and winter entry times differ in Eastern, the guard design is wrong.
-  for (const edition of ['Opening Bell', 'Closing Bell']) {
-    const [summer, winter] = ENTRY_TIMES.filter((e) => e.edition === edition);
-    assert.equal(
-      summer.utc - summer.offset * 60,
-      winter.utc - winter.offset * 60,
-      `${edition} does not deliver at the same Eastern time year round`
-    );
-  }
+test('no build is scheduled during the trading day it has nothing to say about', () => {
+  // Between the two windows there is nothing new to publish, so a build there
+  // would be pure noise. This is what keeps the polling bounded rather than
+  // creeping outward every time something is late.
+  const quiet = buildTimes.filter((t) => t > 16 * 60 && t < 20 * 60);
+  assert.equal(quiet.length, 0, `${quiet.length} builds scheduled in the quiet afternoon hours`);
 });
