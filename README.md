@@ -4,7 +4,7 @@ A daily finance and markets brief, written in plain language, published from Not
 
 **Live at [aidenmark.github.io/the-money-edit](https://aidenmark.github.io/the-money-edit/)**
 
-Each weekday an entry is researched and filed into a Notion database. Once it has been reviewed and promoted out of `Draft`, a scheduled build reads it, renders it as a designed card, and deploys the site. The whole thing runs without anyone opening a laptop.
+Twice each weekday, before the opening bell and after the close, an entry is researched and filed into a Notion database as `Published`. A scheduled build reads it, renders it as a designed card, and deploys the site. The whole thing runs without anyone opening a laptop.
 
 The writing has one rule behind it. Every entry has to answer "what does this mean for my money," not just "what happened."
 
@@ -14,9 +14,9 @@ The writing has one rule behind it. Every entry has to answer "what does this me
 
 ```mermaid
 flowchart LR
-  A["Scheduled task<br/>weekday 9:30am ET"] -->|writes a Draft| B[("Notion database<br/>The Money Edit")]
-  B -->|manual review| C{"Status<br/>Published?"}
-  C -->|no| B
+  A["Scheduled tasks<br/>9:00am and 5:15pm ET"] -->|files an entry| B[("Notion database<br/>The Money Edit")]
+  B --> C{"Status<br/>Published?"}
+  C -->|no, held as Draft| B
   C -->|yes| D["GitHub Actions<br/>scheduled build"]
   D -->|Notion REST API| E["Build script<br/>fetch, parse, render"]
   E -->|static HTML| F["GitHub Pages"]
@@ -26,7 +26,7 @@ Notion is the source of truth. The site is a pure function of it. Nothing is wri
 
 ### Why the build runs in CI
 
-The entries arrive on a schedule but the laptop is not reliably open, so anything needing a manual trigger gets missed. Running the build in GitHub Actions means the site keeps up with Notion on its own.
+The entries arrive on a schedule and the laptop is not reliably open, so a build needing a manual trigger would miss them. Running it in GitHub Actions means the site keeps up with Notion on its own. Actions cron is not punctual, so the schedule covers a window rather than aiming at a moment. `docs/scheduled-tasks.md` has the measurements and the two limits that shape it.
 
 This costs nothing. No language model runs in CI. The job calls the Notion REST API and writes HTML, and Actions minutes are free on a public repository. Research and writing happen upstream in the scheduled task, which is where the only real cost lives.
 
