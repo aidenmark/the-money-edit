@@ -19,3 +19,12 @@ node_modules/
 # Local planning notes. Kept out of the public repo by default because the
 # brief contains personal job search context. Remove this line to publish it.
 the-money-edit-brief.md
+
+# Pasted screenshots and images. These land in the repo root from the
+# clipboard and are not part of the site.
+*.tiff
+*.tif
+*.png
+*.jpg
+*.jpeg
+!assets/**
