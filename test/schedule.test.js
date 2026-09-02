@@ -21,6 +21,13 @@
  * a window wide enough to hold both daylight saving offsets, that an entry
  * appearing anywhere in it is picked up promptly no matter how far behind the
  * queue is running.
+ *
+ * There is a second limit these tests now also pin, learned the expensive way.
+ * Coverage cannot simply be bought by scheduling more. This workflow briefly
+ * asked for 48 builds a weekday with a ten minute step, and GitHub delivered 1
+ * to 3 of them at delays up to four hours, where ten discrete crons had been
+ * delivering 10 to 13 reliably. Requesting more produced far less. So the cron
+ * count is capped here, and spacing has to fit inside that budget.
  */
 
 import { test } from 'node:test';
@@ -100,10 +107,26 @@ const ENTRY_WINDOWS = EASTERN_WINDOWS.flatMap(({ edition, fromEastern, toEastern
 /** The worst cron delay seen in production, used as the safety margin. */
 const OBSERVED_MAX_LAG = 45;
 
-/** How long an entry may wait for the next build, ignoring queue delay. */
-const MAX_SPACING = 10;
+/**
+ * How long an entry may wait for the next build, ignoring queue delay.
+ *
+ * Thirty five rather than ten, because ten cost more crons than GitHub would
+ * actually run. This is the tightest spacing that fits under MAX_CRONS while
+ * still covering both editions in both seasons.
+ */
+const MAX_SPACING = 35;
 
-test('every entry window is covered by builds spaced ten minutes apart', () => {
+/**
+ * The most crons this workflow may ask for.
+ *
+ * Above roughly a dozen, GitHub throttles the schedule and delivers almost
+ * nothing. Ten crons produced 10 to 13 runs a day; 48 produced 1 to 3. This cap
+ * is the empirical ceiling, not a style preference, and raising it has been
+ * tried and made the site a day stale.
+ */
+const MAX_CRONS = 14;
+
+test('every entry window is covered without a gap larger than the spacing budget', () => {
   // This is the property that actually holds under a delayed queue. If builds
   // are scheduled every ten minutes then they execute every ten minutes, so an
   // entry landing anywhere in the window waits at most ten minutes plus
@@ -149,13 +172,19 @@ test('coverage begins early enough to absorb the worst observed delay', () => {
   }
 });
 
-test('one expression covers both seasons, so nothing has to change twice a year', () => {
-  // The workflow used to carry a season specific pair for each edition. The
-  // windows are now wide enough that summer and winter fall inside the same
-  // expression, which is the point.
+test('the schedule stays under the count GitHub will actually run', () => {
+  // The regression this guards against did not fail loudly. Every test passed,
+  // the workflow stayed active, and the runs simply did not happen.
   const crons = [...workflow.matchAll(/cron: '([^']+)'/g)].map(([, cron]) => cron);
-  assert.equal(crons.length, 2, `expected two cron expressions, found ${crons.length}`);
+  assert.ok(
+    crons.length <= MAX_CRONS,
+    `${crons.length} crons requested, above the ${MAX_CRONS} that GitHub reliably delivers`
+  );
+});
 
+test('both seasons are covered without a season specific schedule', () => {
+  // The windows are wide enough that summer and winter fall inside the same
+  // span, so nothing has to be changed twice a year.
   for (const { edition, from, to } of ENTRY_WINDOWS) {
     assert.ok(
       buildTimes.some((t) => t >= from && t <= to + MAX_SPACING),

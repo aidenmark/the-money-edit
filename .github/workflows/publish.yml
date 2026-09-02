@@ -15,39 +15,54 @@ name: Publish
 on:
   # The brief runs twice a weekday, so the site rebuilds twice.
   #
-  # Cron here is UTC, ignores daylight saving, and runs late. Measured over
-  # three days of live operation, every scheduled run started behind its cron
-  # time: 29 to 44 minutes in the morning window, 14 to 21 minutes in the
-  # evening. Nothing was dropped, it is a queue delay.
+  # Cron here is UTC, ignores daylight saving, and runs late. Two separate
+  # limits shape this schedule, and they pull against each other.
   #
-  # That delay hits the whole window at once rather than each run separately.
-  # Two crons ten minutes apart started seven minutes apart, both about forty
-  # minutes late. So a cron cannot be aimed at a moment. Pointing one at 13:10
-  # to catch a 13:05 entry simply produces a build at 13:52.
+  # The first is delay. Runs start behind their cron time, 29 to 44 minutes in
+  # the morning window and 14 to 21 in the evening, and the delay hits the whole
+  # window at once rather than each run separately. Two crons ten minutes apart
+  # started seven minutes apart, both about forty minutes late. So a cron cannot
+  # be aimed at a moment. What survives the delay is spacing, which is why the
+  # windows below are spread rather than pointed.
   #
-  # What survives the delay is spacing. If runs are scheduled every ten minutes
-  # they execute every ten minutes, wherever the queue happens to put them. So
-  # the guarantee this workflow makes is not "a build at 9:10am" but "a build
-  # within about ten minutes of whenever the entry lands", which is the thing
-  # that actually matters and the only one that is achievable.
+  # The second is throttling, and it is the one that bit hardest. This file
+  # briefly ran '*/10' across both windows, asking for 48 builds a weekday.
+  # GitHub delivered 1 to 3, at delays as long as four hours, and the site went
+  # a full day stale. The previous schedule of ten discrete crons had been
+  # delivering 10 to 13 runs a day reliably. Asking for more produced far less.
   #
-  # The windows start an hour before the earliest possible entry so that
-  # execution has already begun by the time one appears, even at the worst lag
-  # seen so far.
+  #   48 crons requested  ->  1 to 3 delivered
+  #   10 crons requested  ->  10 to 13 delivered
+  #
+  # So the ceiling is roughly a dozen, and spacing has to be bought within that
+  # budget rather than on top of it. Fourteen crons, thirty five minutes apart,
+  # placed early enough that the queue delay lands them inside the window rather
+  # than after it.
   #
   #   entries land   9:05 to 10:25am Eastern   =  13:05 to 15:25 UTC year round
   #                  5:16 to 6:40pm Eastern    =  21:16 to 23:40 UTC year round
   #
-  # Both seasons are covered by one expression each, because the window is wide
-  # enough to hold the Eastern time in either offset. That removes the pairs of
-  # season specific crons this file used to carry, and with them a whole class
-  # of twice yearly bug.
+  # Both seasons still fall inside one span per edition, so nothing has to
+  # change twice a year.
   #
-  # This is polling, and it is polling because the alternative is unavailable.
-  # See repository_dispatch below.
+  # The honest guarantee is a build within about thirty five minutes of an
+  # entry, not the ten the '*/10' version promised and did not deliver. For
+  # anything faster, see repository_dispatch below.
   schedule:
-    - cron: '*/10 12-15 * * 1-5'
-    - cron: '*/10 20-23 * * 1-5'
+    - cron: '15 12 * * 1-5'
+    - cron: '50 12 * * 1-5'
+    - cron: '25 13 * * 1-5'
+    - cron: '0 14 * * 1-5'
+    - cron: '35 14 * * 1-5'
+    - cron: '10 15 * * 1-5'
+    - cron: '45 15 * * 1-5'
+    - cron: '30 20 * * 1-5'
+    - cron: '5 21 * * 1-5'
+    - cron: '40 21 * * 1-5'
+    - cron: '15 22 * * 1-5'
+    - cron: '50 22 * * 1-5'
+    - cron: '25 23 * * 1-5'
+    - cron: '55 23 * * 1-5'
 
   # Publish on demand from outside GitHub. This is how the scheduled task can
   # rebuild the site the moment it finishes writing an entry, instead of the
