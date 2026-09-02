@@ -51,12 +51,23 @@ The order matters. The gate has to come before the duplicate check, or the
 winter 8:00am firing would write first and the 9:00am one would be rejected as
 a duplicate, which is the failure this is meant to prevent.
 
-### If claude.ai lets you set a timezone on the task
+### It does let you set a timezone, so most of the above is unnecessary
 
-Check first. If a task can be scheduled in `America/New_York` rather than UTC,
-use that and skip all of this: one cron per edition, no time gate, and keep the
-duplicate check only as protection against manual test fires. The two cron
-approach exists because fixed UTC leaves no other way to hold a local time.
+This section used to say "check first." It has been checked. **claude.ai
+schedules tasks in local time and follows daylight saving on its own.** A task
+set up as the 13:00 UTC firing displays as `Repeats: Weekdays at 9:00 AM` and
+its next run stays at 9:00 AM Eastern across the boundary.
+
+That means the two firing design solves a problem that does not exist here. The
+second firing of each pair will never become the real one, and the TIME GATE
+that exists to kill it has nothing to kill. What it does instead is make the
+task look up the current time over the network, which is an approval prompt
+every single run.
+
+The design is still correct for a scheduler that is genuinely fixed to UTC,
+which is why the reasoning is kept below. It is not correct for this one. The
+GitHub Actions crons in the workflow are a separate matter and genuinely are
+UTC, so the two season handling there stays.
 
 ### If a task only supports one cron
 
@@ -402,38 +413,39 @@ one at 13:55.
 It also explains why mornings are twice as bad as evenings. 13:00 to 15:00 UTC
 is peak load on GitHub's shared runners.
 
-### What does work: cover the window instead of aiming at it
+### What does work, within a limit found the hard way
 
-A uniform delay destroys timing but preserves **spacing**. Runs scheduled ten
-minutes apart execute ten minutes apart, wherever the queue puts them. So the
-workflow now schedules every ten minutes across two windows wide enough to hold
-both daylight saving offsets:
+A uniform delay destroys timing but preserves **spacing**. Runs scheduled N
+minutes apart execute N minutes apart, wherever the queue puts them.
+
+That reasoning is right, and acting on it alone still broke the site. The
+workflow briefly used `*/10` across both windows, asking for 48 builds a
+weekday. GitHub throttles high frequency schedules, and delivery collapsed:
 
 ```
-*/10 12-15 * * 1-5     morning, covers 9:05 to 10:25am Eastern year round
-*/10 20-23 * * 1-5     evening, covers 5:16 to 6:40pm Eastern year round
+10 crons requested  ->  10 to 13 runs a day
+48 crons requested  ->  1 to 3 runs a day, delays up to four hours
 ```
 
-The windows open an hour before the earliest possible entry, so execution is
-already underway by the time one appears even at the worst delay seen.
+Runs per day went 13, 13, 5, 2, 2, 1, 2, 3, 1. Some fired at 02:03 and 04:05
+UTC, hours outside either window. On 2026-09-02 the site was a full day stale,
+serving September 1 while September 2 sat published in Notion. Nothing failed
+loudly: the workflow stayed active, both crons parsed, and every test passed.
 
-The guarantee changes shape. It is no longer "a build at 9:10am", which was
-never true. It is "a build within about ten minutes of whenever the entry
-lands", which holds regardless of how far behind the queue is running.
+So spacing has to be bought inside a cron budget rather than on top of one. The
+deployed schedule is fourteen crons, thirty five minutes apart, placed early
+enough that the queue delay lands them inside the window rather than after it:
 
-Replayed against the five editions published so far, using the delay each day
-actually had:
+```
+15,50 12 * 1-5   25 13   0,35 14   10,45 15     morning
+30 20   5,40 21   15,50 22   25,55 23           evening
+```
 
-| Edition | Entry | Delay that day | Site live |
-|---|---|---|---|
-| Wed opening | 13:22 | 42 min | 13:22 |
-| Wed closing | 21:19 | 21 min | 21:21 |
-| Thu opening | 13:42 | 44 min | 13:44 |
-| Thu closing | 22:03 | 18 min | 22:08 |
-| Fri opening | 13:10 | 40 min | 13:10 |
+Both seasons fall inside one span per edition, so nothing changes twice a year.
 
-Nought to five minutes, against the thirty one to forty minutes those mornings
-actually saw.
+The honest guarantee is a build within about thirty five minutes of an entry.
+That is worse than the ten minutes the `*/10` version promised, and much better
+than the one to three builds a day it delivered.
 
 This is polling, and it is polling because push is unavailable. Forty eight
 builds a weekday, six an hour, under the ten per hour Pages guidance. Each is
