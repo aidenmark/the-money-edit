@@ -1,0 +1,36 @@
+# The rebuild trigger, deployed to Cloudflare Workers.
+#
+# Deploy from this directory:
+#
+#   npx wrangler login
+#   npx wrangler deploy
+#   npx wrangler secret put GITHUB_TOKEN
+#
+# GITHUB_TOKEN is a GitHub fine grained personal access token with Contents
+# write on aidenmark/the-money-edit and nothing else. It is stored encrypted by
+# Cloudflare and is never in this repository.
+
+name = "the-money-edit-rebuild"
+main = "src/index.js"
+compatibility_date = "2026-09-09"
+
+# One expression, not several, because the Workers free plan allows five Cron
+# Triggers per account and two other Workers already live in this account.
+# Standard cron lists and steps do the whole job inside a single trigger.
+#
+# The UTC span is wide enough to hold both daylight saving offsets:
+#
+#   13:00 to 15:50 UTC  =  9:00 to 11:50am Eastern in summer
+#                          8:00 to 10:50am Eastern in winter
+#   21:00 to 23:50 UTC  =  5:00 to 7:50pm Eastern in summer
+#                          4:00 to 6:50pm Eastern in winter
+#
+# Roughly half of those firings land outside the Eastern watch window in any
+# given season. The Worker returns early on those, which is the intent. Getting
+# the season wrong in a cron is the twice yearly bug this avoids by never
+# encoding a season at all.
+[triggers]
+crons = ["*/10 13-15,21-23 * * 1-5"]
+
+[observability]
+enabled = true

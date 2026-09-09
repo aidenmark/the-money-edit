@@ -26,7 +26,9 @@ Notion is the source of truth. The site is a pure function of it. Nothing is wri
 
 ### Why the build runs in CI
 
-The entries arrive on a schedule and the laptop is not reliably open, so a build needing a manual trigger would miss them. Running it in GitHub Actions means the site keeps up with Notion on its own. Actions cron is not punctual, so the schedule covers a window rather than aiming at a moment. `docs/scheduled-tasks.md` has the measurements and the two limits that shape it.
+The entries arrive on a schedule and the laptop is not reliably open, so a build needing a manual trigger would miss them. Running it in GitHub Actions means the site keeps up with Notion on its own.
+
+What starts that build is no longer GitHub's own scheduler. Actions handles every trigger immediately except `schedule`, which it deprioritizes under load: a manual dispatch produced a run in the same second it was sent, while scheduled crons drifted from 40 minutes late in August to over three hours by September, and one morning produced no run at all. A small Cloudflare Worker in `worker/` now watches the published site and fires the build the moment today's edition is missing. The repository, the build and the site are all still on GitHub. Only the alarm clock moved. `docs/scheduled-tasks.md` has the measurements.
 
 This costs nothing. No language model runs in CI. The job calls the Notion REST API and writes HTML, and Actions minutes are free on a public repository. Research and writing happen upstream in the scheduled task, which is where the only real cost lives.
 
