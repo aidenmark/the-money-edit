@@ -321,101 +321,93 @@ https://aidenmark.github.io/the-money-edit/latest/
 
 ---
 
-## Rebuild trigger, attempted and abandoned
+## Rebuild trigger, and why it lives on Cloudflare
 
-**Do not add a GitHub token to these prompts. It cannot work.**
-
-Scheduled cloud sessions on claude.ai are blocked from reaching the GitHub API.
-A proxy in the run environment intercepts calls to `api.github.com`, and a
-`repository_dispatch` POST comes back with:
+The task that writes an entry cannot trigger the site build. Scheduled cloud
+sessions on claude.ai are blocked from reaching the GitHub API by a proxy in
+their run environment:
 
 ```
 403  repository_dispatch is not permitted for this session type
 ```
 
 This is a platform restriction, not a scope problem. A correctly scoped fine
-grained token with Contents write fails exactly the same way, so the only thing
-adding one achieves is putting a live credential in plaintext inside four
-stored prompts. This was tried on 2026-08-19 and both Closing Bell firings
-reported the 403.
+grained token fails identically, so adding one only puts a live credential in a
+stored prompt. That was tried on 2026-08-19 and both firings hit the 403.
 
-The `repository_dispatch` trigger stays wired up in the publish workflow,
-because it works fine from anywhere with real network access. It just cannot be
-fired from the task that writes the entry.
+### GitHub's own scheduler could not cover the gap either
 
-### The lag this leaves, measured
+The fallback was GitHub Actions cron. It degraded badly:
 
-Every scheduled build across the first two days both editions ran live:
+| Date | Median delay | Worst |
+|---|---|---|
+| Aug 19 to 21 | 29 to 44 min | 44 min |
+| Sep 3 | 78 min | 187 min |
+| Sep 7 | 152 min | 218 min |
+| Sep 8 | 79 min | 193 min |
+| Sep 9 | no morning run at all | |
 
-| Window | Cron (UTC) | Started | Late by |
-|---|---|---|---|
-| morning | 13:10 | 13:52 | 42 min |
-| morning | 13:20 | 13:59 | 39 min |
-| morning | 14:10 | 14:51 | 41 min |
-| morning | 14:20 | 14:56 | 36 min |
-| morning | 14:35 | 15:04 | 29 min |
-| morning | 15:00 | 15:31 | 31 min |
-| evening | 21:30 | 21:51 | 21 min |
-| evening | 21:45 | 21:59 | 14 min |
-| evening | 22:30 | 22:50 | 20 min |
-| evening | 22:45 | 23:01 | 16 min |
+On 2026-09-09 the entry published at 13:20 UTC and not one of the five morning
+crons had fired by 14:45. The site sat a day stale until it was rebuilt by hand.
 
-### Why aiming a cron at a moment does not work
-
-The obvious response is to point a cron just after each publish time. That is
-what this repository did for three days and it failed every morning.
-
-The 13:10 and 13:20 crons were ten minutes apart and started seven minutes
-apart, both about forty minutes late. The delay hits the whole window at once
-rather than each run independently, so a cron aimed at 13:10 to catch a 13:05
-entry simply produces a build at 13:52. Adding another cron at 13:15 produces
-one at 13:55.
-
-It also explains why mornings are twice as bad as evenings. 13:00 to 15:00 UTC
-is peak load on GitHub's shared runners.
-
-### What does work, within a limit found the hard way
-
-A uniform delay destroys timing but preserves **spacing**. Runs scheduled N
-minutes apart execute N minutes apart, wherever the queue puts them.
-
-That reasoning is right, and acting on it alone still broke the site. The
-workflow briefly used `*/10` across both windows, asking for 48 builds a
-weekday. GitHub throttles high frequency schedules, and delivery collapsed:
+Three cron configurations were measured before giving up on this path:
 
 ```
-10 crons requested  ->  10 to 13 runs a day
-48 crons requested  ->  1 to 3 runs a day, delays up to four hours
+10 crons requested  ->  10 to 13 runs a day, 29 to 44 min late
+48 crons requested  ->  1 to 3 runs a day, throttled
+14 crons requested  ->  14 runs a day, 1 to 3.5 hours late
 ```
 
-Runs per day went 13, 13, 5, 2, 2, 1, 2, 3, 1. Some fired at 02:03 and 04:05
-UTC, hours outside either window. On 2026-09-02 the site was a full day stale,
-serving September 1 while September 2 sat published in Notion. Nothing failed
-loudly: the workflow stayed active, both crons parsed, and every test passed.
+More gets throttled, fewer covers less, and neither changes how long GitHub
+sits on the event. The delay is on their side and has no setting.
 
-So spacing has to be bought inside a cron budget rather than on top of one. The
-deployed schedule is fourteen crons, thirty five minutes apart, placed early
-enough that the queue delay lands them inside the window rather than after it:
+### What is broken is only the `schedule` event
+
+Every other GitHub trigger is immediate. A `repository_dispatch` sent at
+14:45:56 created its run at 14:45:56, the same second. GitHub is not the
+problem; its alarm clock is.
+
+### So the alarm clock moved, and nothing else did
+
+`worker/` holds a Cloudflare Worker on a Cron Trigger. Cloudflare fires on time.
+The Worker asks the published site whether today's edition is there yet, and
+sends a `repository_dispatch` only when it is missing.
+
+The repository, the build, and the site all remain on GitHub. This replaces one
+thing: what decides when to knock.
+
+Two design choices worth keeping:
+
+**It checks the site rather than Notion.** "Is the site current" is the question
+that actually matters, and answering it from the published page keeps the Notion
+token out of a second platform. The Worker holds one secret, a GitHub token with
+Contents write on this repository and nothing else.
+
+**It only fires when something is missing.** Knocking on all 36 ticks a weekday
+would mean 36 deploys a day, which is wasteful and near the rate GitHub Pages
+will accept. In the normal case it sends one or two dispatches per edition and
+then goes quiet.
+
+The Actions crons are kept as a fallback for a Worker that is broken or
+undeployed. They cost nothing when the site is already current.
+
+### Deploying it
+
+From `worker/`:
 
 ```
-15,50 12 * 1-5   25 13   0,35 14   10,45 15     morning
-30 20   5,40 21   15,50 22   25,55 23           evening
+npx wrangler login
+npx wrangler deploy
+npx wrangler secret put GITHUB_TOKEN
 ```
 
-Both seasons fall inside one span per edition, so nothing changes twice a year.
+The token is a GitHub fine grained personal access token with **Contents: write**
+on `aidenmark/the-money-edit` and nothing else, with an expiry set. Cloudflare
+stores it encrypted. Never paste it into a chat or a file.
 
-The honest guarantee is a build within about thirty five minutes of an entry.
-That is worse than the ten minutes the `*/10` version promised, and much better
-than the one to three builds a day it delivered.
-
-This is polling, and it is polling because push is unavailable. Forty eight
-builds a weekday, six an hour, under the ten per hour Pages guidance. Each is
-about thirty seconds and Actions minutes are free on a public repository. When
-nothing has changed the build simply republishes identical output.
-
-A side effect worth having: both seasons now fall inside one expression per
-edition, so the season specific cron pairs this file used to carry are gone,
-and with them a twice yearly opportunity to get the offset wrong.
+The Worker also serves a read only status endpoint at its own URL, reporting
+which edition it thinks is due and whether it would fire. It never dispatches
+from that path, so the public URL cannot be used to force builds.
 
 ---
 
