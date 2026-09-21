@@ -1,7 +1,10 @@
 # The rebuild trigger, deployed to Cloudflare Workers.
 #
-# Deploy from this directory:
+# Deploy from this directory. Wrangler needs Node 20 or newer and this project
+# runs on 18, so point the shell at a newer one first rather than changing the
+# default, which the test suite depends on:
 #
+#   export PATH="/opt/homebrew/opt/node@23/bin:$PATH"
 #   npx wrangler login
 #   npx wrangler deploy
 #   npx wrangler secret put GITHUB_TOKEN
@@ -9,6 +12,28 @@
 # GITHUB_TOKEN is a GitHub fine grained personal access token with Contents
 # write on aidenmark/the-money-edit and nothing else. It is stored encrypted by
 # Cloudflare and is never in this repository.
+#
+# THE TOKEN EXPIRES. At 90 days that is roughly every quarter, and when it does
+# the Worker keeps running while every dispatch fails with a 401, silently. The
+# symptom is the site quietly going stale again, which looks identical to the
+# problem this Worker was built to fix. Put the expiry date in a calendar.
+#
+# WHEN YOU RENEW IT, MIND THIS TRAP. In `wrangler secret put GITHUB_TOKEN`,
+# the words GITHUB_TOKEN are the label. The token itself goes in afterwards, at
+# the `? Enter a secret value:` prompt. That prompt echoes nothing as you type,
+# so there is no visible difference between doing it right and pasting the token
+# onto the command line by mistake. Putting it on the command line makes the
+# token the secret's *name*, and names are not encrypted: it then shows in
+# `wrangler secret list` and in the Cloudflare dashboard in plain text. That
+# happened on 2026-09-21 and cost a token, which had to be revoked and reissued.
+#
+# So: type the command by hand rather than pasting it, wait for the prompt, and
+# then check the result. `wrangler secret list` must print exactly this:
+#
+#   [ { "name": "GITHUB_TOKEN", "type": "secret_text" } ]
+#
+# If the name is a long github_pat_ string instead, the token is exposed. Revoke
+# it on GitHub immediately, delete the secret, and start over.
 
 name = "the-money-edit-rebuild"
 main = "src/index.js"
