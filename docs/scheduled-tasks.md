@@ -393,17 +393,53 @@ undeployed. They cost nothing when the site is already current.
 
 ### Deploying it
 
-From `worker/`:
+Wrangler needs Node 20 or newer and this project runs on 18, so point the shell
+at a newer Node rather than changing the default, which the test suite depends
+on. From `worker/`:
 
 ```
+export PATH="/opt/homebrew/opt/node@23/bin:$PATH"
 npx wrangler login
 npx wrangler deploy
 npx wrangler secret put GITHUB_TOKEN
 ```
 
-The token is a GitHub fine grained personal access token with **Contents: write**
-on `aidenmark/the-money-edit` and nothing else, with an expiry set. Cloudflare
-stores it encrypted. Never paste it into a chat or a file.
+The token is a GitHub fine grained personal access token with **Contents: read
+and write** on `aidenmark/the-money-edit` and nothing else, with an expiry set.
+Cloudflare stores the value encrypted. Never paste it into a chat or a file.
+
+`wrangler login` may report that you are already logged in with an API token.
+That is fine and `deploy` works anyway.
+
+### The token expires, and the failure is silent
+
+At 90 days that is roughly quarterly. When it lapses the Worker keeps running
+and every dispatch fails with a 401, with nothing to notice. The symptom is the
+site quietly going stale, which looks exactly like the problem this Worker was
+built to fix. **Put the expiry date in a calendar.**
+
+### One trap when setting the secret
+
+In `wrangler secret put GITHUB_TOKEN`, the words `GITHUB_TOKEN` are the label.
+The token goes in afterwards, at the `? Enter a secret value:` prompt.
+
+That prompt echoes nothing as you type, so there is no visible difference
+between doing it correctly and accidentally pasting the token onto the command
+line. Getting it wrong makes the token the secret's **name**, and names are not
+encrypted. It then appears in `wrangler secret list` and in the Cloudflare
+dashboard in plain text.
+
+This happened on 2026-09-21. The token had to be revoked and reissued.
+
+Type the command by hand, wait for the prompt, then verify. `wrangler secret
+list` must print exactly:
+
+```json
+[ { "name": "GITHUB_TOKEN", "type": "secret_text" } ]
+```
+
+If the name is a long `github_pat_` string, the token is exposed. Revoke it on
+GitHub immediately, `wrangler secret delete` it, and start over.
 
 The Worker also serves a read only status endpoint at its own URL, reporting
 which edition it thinks is due and whether it would fire. It never dispatches
